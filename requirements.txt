@@ -2,3 +2,4 @@ pandas
 numpy
 pyarrow
 earthengine-api
+pillow
