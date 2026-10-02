@@ -188,9 +188,12 @@ def train_and_predict(images, y, train_idx, predict_idx, args, device):
 
 def summary_features(images):
     """Per-band mean, std and 10th/50th/90th percentiles: a 'no deep learning' baseline."""
-    x = images.reshape(len(images), 6, -1).astype(np.float32)
-    feats = [x.mean(2), x.std(2), *np.percentile(x, [10, 50, 90], axis=2)]
-    return np.concatenate(feats, axis=1)
+    out = []
+    for start in range(0, len(images), 2000):  # in chunks, to keep memory use low
+        x = images[start:start + 2000].reshape(-1, 6, images.shape[2] * images.shape[3]).astype(np.float32)
+        feats = [x.mean(2), x.std(2), *np.percentile(x, [10, 50, 90], axis=2)]
+        out.append(np.concatenate(feats, axis=1))
+    return np.concatenate(out)
 
 
 def ridge_predict(features, y, train_idx, predict_idx):
