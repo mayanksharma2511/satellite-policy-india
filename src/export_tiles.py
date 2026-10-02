@@ -33,7 +33,7 @@ TILES = Path("data/tiles")
 SIZE = 96          # pixels per side
 PIXEL = 30         # metres per pixel (Landsat)
 BANDS = ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7"]
-TRAIN_PER_STATE = 3000
+TRAIN_PER_STATE = 1500  # extra training villages per state (the roads-study villages also train the model)
 SEED = 2027
 SHARD = 250   # save often, so stopping the script loses little
 
