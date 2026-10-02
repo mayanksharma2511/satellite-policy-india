@@ -6,6 +6,7 @@ Each row is a SHRUG village (shrid). It joins:
   - 2001 village directory (paved road, electricity)      -> who was eligible for a new road
   - 2011 census population and workforce                  -> outcomes
   - SECC 2012 consumption and poverty rate                 -> the wealth label the CNN learns
+  - SECC 2012 share of people in cultivation jobs          -> the paper's clearest outcome
   - PMGSY: when a new road was sanctioned / completed     -> the "treatment"
 
 Output: data/processed/villages.csv.gz
@@ -42,13 +43,18 @@ COLUMNS = {
     ],
     "shrug-vd01-csv/pc01_vd_clean_shrid.csv": [
         "pc01_vd_app_pr", "pc01_vd_power_supl", "pc01_vd_dist_town",
+        "pc01_vd_p_sch", "pc01_vd_medi_fac", "pc01_vd_tot_irr", "pc01_vd_un_irr",
     ],
     "shrug-pca11-csv/pc11_pca_clean_shrid.csv": [
         "pc11_pca_tot_p", "pc11_pca_no_hh", "pc11_pca_p_lit",
         "pc11_pca_tot_work_p", "pc11_pca_main_cl_p", "pc11_pca_main_al_p",
+        "pc11_pca_marg_cl_p", "pc11_pca_marg_al_p",
     ],
     "shrug-secc-cons-rural-csv/secc_cons_rural_shrid.csv": [
         "secc_cons_pc_rural", "secc_pov_rate_rural",
+    ],
+    "shrug-secc-mord-rural-csv/secc_rural_shrid.csv": [
+        "nco2d_cultiv_share", "land_own_share",
     ],
     "shrug-pmgsy-csv/pmgsy_2015_shrid.csv": [
         "road_sanc_year_new", "road_award_date_new", "road_comp_date_new",

@@ -12,14 +12,15 @@ and ask: would the satellite version have reached the same conclusion?
 
 Also reported:
   - first stage (how much the cut-off raises the chance of a road)
-  - share of workers in agriculture, 2011 (the paper's clearest effect) as a sanity check
+  - share of people in cultivation jobs, SECC 2012 (the paper's clearest effect, -9 points) as a
+    sanity check; the Census 2011 farming share is also reported
   - minimum detectable effect: the smallest road effect this design could reliably detect
   - road-visibility check: does the satellite model's *error* jump at the cut-off?
     If it does, the model may be "seeing" the new road itself rather than wealth.
   - robustness to the bandwidth (60, 84, 120 people)
 
 Specification (following the paper): local linear regression on each side of the
-cut-off, triangular kernel, state-by-cut-off fixed effects, baseline 2001 controls,
+cut-off, triangular kernel, district-by-cut-off fixed effects, baseline 2001 controls,
 heteroskedasticity-robust standard errors.
 
 Run: python src/rd_roads.py --predictions outputs/predictions_crossfit.csv
@@ -35,8 +36,9 @@ from linearmodels.iv import IV2SLS
 VILLAGES = Path("data/processed/villages.csv.gz")
 RESULTS = Path("results")
 MAIN_BANDWIDTH = 84
-CONTROLS = ["lit_rate_01", "sc_share_01", "st_share_01", "ag_share_01",
-            "power_01", "dist_town_01", "log_pop_01"]
+# Baseline (2001) controls, following the paper's list as far as SHRUG allows
+CONTROLS = ["lit_rate_01", "sc_share_01", "st_share_01", "ag_share_01", "power_01",
+            "school_01", "medical_01", "irrigated_01", "dist_town_01", "log_pop_01"]
 
 
 def prepare(villages, predictions):
@@ -49,16 +51,26 @@ def prepare(villages, predictions):
     v["ag_share_01"] = (v["pc01_pca_main_cl_p"] + v["pc01_pca_main_al_p"]) / work
     v["power_01"] = v["pc01_vd_power_supl"].fillna(0).clip(0, 1)
     v["dist_town_01"] = v["pc01_vd_dist_town"]
+    v["school_01"] = (v["pc01_vd_p_sch"].fillna(0) > 0).astype(int)
+    v["medical_01"] = (v["pc01_vd_medi_fac"].fillna(0) > 0).astype(int)
+    land = v["pc01_vd_tot_irr"].fillna(0) + v["pc01_vd_un_irr"].fillna(0)
+    v["irrigated_01"] = (v["pc01_vd_tot_irr"].fillna(0) / land.replace(0, np.nan)).fillna(0)
     v["log_pop_01"] = np.log(p)
-    v["ag_share_11"] = ((v["pc11_pca_main_cl_p"] + v["pc11_pca_main_al_p"])
+    # main + marginal cultivators and agricultural labourers, over all workers (Census 2011).
+    # The paper uses SECC 2012 workers aged 21-60, which SHRUG does not provide by occupation.
+    v["ag_share_11"] = ((v["pc11_pca_main_cl_p"] + v["pc11_pca_main_al_p"]
+                         + v["pc11_pca_marg_cl_p"] + v["pc11_pca_marg_al_p"])
                         / v["pc11_pca_tot_work_p"].replace(0, np.nan))
+    v["cultiv_share_12"] = v["nco2d_cultiv_share"]  # SECC 2012, as in the paper's Table 5
     v["survey"] = np.log(v["secc_cons_pc_rural"])
     v["satellite"] = v["pred_cnn"]
     v["satellite_error"] = v["satellite"] - v["survey"]
     if "pred_ridge" in v:
         v["ridge"] = v["pred_ridge"]
     v["road"] = v["new_road_by_2012"]
-    v["group"] = v["state_name"] + "_" + v["threshold"].astype(int).astype(str)
+    # district-by-threshold fixed effects, as in the paper
+    v["group"] = (v["state_name"] + "/" + v["district_name"] + "_"
+                  + v["threshold"].astype(int).astype(str))
     v["r_above"] = v["running"] * v["above"]
     return v
 
@@ -112,7 +124,7 @@ def main():
         # compare survey and satellite on exactly the same villages
         same = s.dropna(subset=["survey", "satellite"])
         fs, fs_se = first_stage(same)
-        outcomes = ["survey", "satellite", "ag_share_11"] + (["ridge"] if "ridge" in s else [])
+        outcomes = ["survey", "satellite", "cultiv_share_12", "ag_share_11"] + (["ridge"] if "ridge" in s else [])
         for outcome in outcomes:
             rows.append({"bandwidth": bw, "outcome": outcome, "first_stage": fs,
                          "first_stage_se": fs_se, **road_effect(same, outcome)})
@@ -130,7 +142,7 @@ def main():
     print(f"First stage: being above the cut-off raises the chance of a road by "
           f"{main.loc['survey', 'first_stage']:.3f} (se {main.loc['survey', 'first_stage_se']:.3f})")
     print("\nEffect of a new road (log consumption per person; 0.10 is about +10%):")
-    for name in ["survey", "satellite", "ridge", "ag_share_11"]:
+    for name in ["survey", "satellite", "ridge", "cultiv_share_12", "ag_share_11"]:
         if name in main.index:
             r = main.loc[name]
             print(f"  {name:<12} {r['estimate']:+.3f}  95% CI [{r['ci_low']:+.3f}, {r['ci_high']:+.3f}]"
