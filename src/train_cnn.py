@@ -57,7 +57,11 @@ def load(roots):
         ids.extend(data["shrid2"].tolist())
     images = np.concatenate(images)
 
-    villages = pd.read_csv(find_file("villages.csv.gz", roots)[0], dtype={"shrid2": str})
+    try:
+        villages_path = find_file("villages.csv.gz", roots)[0]
+    except FileNotFoundError:  # Kaggle unzips .gz files when a dataset is uploaded
+        villages_path = find_file("villages.csv", roots)[0]
+    villages = pd.read_csv(villages_path, dtype={"shrid2": str})
     table = pd.DataFrame({"shrid2": ids}).merge(villages, on="shrid2", how="left")
     table["y"] = np.log(table["secc_cons_pc_rural"])
     table["district"] = table["state_name"] + "/" + table["district_name"]
