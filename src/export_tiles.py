@@ -35,11 +35,15 @@ PIXEL = 30         # metres per pixel (Landsat)
 BANDS = ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7"]
 TRAIN_PER_STATE = 3000
 SEED = 2027
-SHARD = 1000
+SHARD = 250   # save often, so stopping the script loses little
 
 
-def composite():
-    """Median of cloud-masked Landsat 7 scenes, dry season Oct 2010 - Mar 2012."""
+def composite(region=None):
+    """Median of cloud-masked Landsat 7 scenes, dry season Oct 2010 - Mar 2012.
+
+    With `region`, only scenes touching that area are used, so Earth Engine does far
+    less work per request than when it has to consider every scene in the six states.
+    """
     def clean(img):
         qa = img.select("QA_PIXEL")
         clear = (qa.bitwiseAnd(1 << 1).eq(0)        # dilated cloud
@@ -47,9 +51,9 @@ def composite():
                  .And(qa.bitwiseAnd(1 << 4).eq(0))) # cloud shadow
         return img.select(BANDS).multiply(0.0000275).add(-0.2).updateMask(clear)
 
-    india_centre = ee.Geometry.Rectangle([68, 15, 89, 31])  # covers the six states (lat 15-31 N)
+    area = region or ee.Geometry.Rectangle([68, 15, 89, 31])  # six states span lat 15-31 N
     return (ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
-            .filterBounds(india_centre)
+            .filterBounds(area)
             .filter(ee.Filter.Or(ee.Filter.date("2010-10-01", "2011-04-01"),   # two dry seasons
                                  ee.Filter.date("2011-10-01", "2012-04-01")))
             .map(clean)
@@ -65,8 +69,13 @@ def to_mercator(lat, lon):
     return x, y
 
 
-def fetch(image, lat, lon):
+RETRIES = {"count": 0}
+
+
+def fetch(lat, lon):
     """Return a (6, SIZE, SIZE) uint8 array centred on (lat, lon)."""
+    half = SIZE * PIXEL / 2 / 111_000 * 1.5  # tile half-width in degrees, with margin
+    image = composite(ee.Geometry.Rectangle([lon - half, lat - half, lon + half, lat + half]))
     # Web Mercator stretches distances by 1/cos(lat); correct so pixels are ~30 m on the ground
     step = PIXEL / math.cos(math.radians(lat))
     x, y = to_mercator(lat, lon)
@@ -89,6 +98,7 @@ def fetch(image, lat, lon):
         except ee.ee_exception.EEException as err:
             if attempt == 4:
                 raise
+            RETRIES["count"] += 1
             time.sleep(2 ** attempt)  # back off on rate limits / transient errors
 
 
@@ -146,7 +156,6 @@ def main():
           f"{(sample['in_rd_sample'] == 0).sum():,} training). Already done: {len(done):,}. "
           f"To download now: {len(todo):,}")
 
-    image = composite()
     if args.check:
         scenes = (ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
                   .filterBounds(ee.Geometry.Rectangle([68, 15, 89, 31]))
@@ -154,14 +163,14 @@ def main():
                                        ee.Filter.date("2011-10-01", "2012-04-01"))))
         print(f"Landsat 7 scenes in the composite: {scenes.size().getInfo():,}")
         r = todo.iloc[0]
-        tile = fetch(image, r.latitude, r.longitude)
+        tile = fetch(r.latitude, r.longitude)
         print(f"Test tile for {r.shrid2} ({r.latitude:.3f}, {r.longitude:.3f}): "
               f"band means {tile.reshape(6, -1).mean(axis=1).round(1).tolist()}")
         return
     images, ids, failed = [], [], 0
-    start = time.time()
+    start = last = time.time()
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        jobs = {pool.submit(fetch, image, r.latitude, r.longitude): r.shrid2
+        jobs = {pool.submit(fetch, r.latitude, r.longitude): r.shrid2
                 for r in todo.itertuples()}
         for i, job in enumerate(as_completed(jobs), 1):
             try:
@@ -176,8 +185,10 @@ def main():
                 images, ids = [], []
             if i % 200 == 0:
                 rate = i / (time.time() - start)
-                print(f"  {i:,}/{len(todo):,} done, {rate:.1f}/s, "
-                      f"about {(len(todo) - i) / rate / 60:.0f} min left")
+                recent = 200 / (time.time() - last)
+                last = time.time()
+                print(f"  {i:,}/{len(todo):,} done, now {recent:.1f}/s (average {rate:.1f}/s), "
+                      f"about {(len(todo) - i) / rate / 60:.0f} min left, retries so far {RETRIES['count']}")
 
     if images:
         if args.preview:
