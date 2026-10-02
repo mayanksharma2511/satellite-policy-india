@@ -22,3 +22,20 @@
    train 20 epochs; consider a housing/assets label (Census 2011 houselisting).
 2. Re-run evaluate_predictions.py and rd_roads.py; report slope and detectable effect.
 3. Public map, write-up, README.
+
+## Run 2: 20 epochs (3 Oct 2026)
+Same code and data, `--epochs 20`. Files kept in outputs/e20/ (8-epoch run in outputs/e8/).
+
+| | 8 epochs | 20 epochs |
+|---|---|---|
+| Cross-fit R² | 0.199 | 0.205 |
+| Cross-fit within-state Spearman | 0.40 | 0.41 |
+| Unseen-state (LOSO) R² | 0.088 | 0.043 |
+| Unseen-state Spearman | 0.34 | 0.34 |
+| Shrink factor (RD sample) | 0.208 | 0.225 |
+| RD satellite estimate | -0.016 | -0.015 |
+
+Decision: keep 8 epochs as the main model. Longer training helps slightly in states the model
+has seen but hurts in new ones (Chhattisgarh -0.05 -> -0.29), so it fits the training states
+more closely without learning more about wealth. Training length is not the bottleneck;
+the inputs are. Next: add night lights as an input.
