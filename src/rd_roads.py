@@ -64,7 +64,7 @@ def prepare(villages, predictions):
 
 
 def sample(v, bandwidth):
-    s = v[(v["no_paved_road_2001"] == 1) & (v["running"].abs() <= bandwidth)].copy()
+    s = v[(v["no_paved_road_2001"] == 1) & (v["running"].abs() < bandwidth)].copy()
     s["w"] = 1 - s["running"].abs() / bandwidth  # triangular kernel: closest villages count most
     return s.dropna(subset=CONTROLS)
 
