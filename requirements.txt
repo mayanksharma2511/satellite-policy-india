@@ -3,3 +3,5 @@ numpy
 pyarrow
 earthengine-api
 pillow
+statsmodels
+linearmodels
