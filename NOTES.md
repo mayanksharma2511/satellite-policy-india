@@ -39,3 +39,28 @@ Decision: keep 8 epochs as the main model. Longer training helps slightly in sta
 has seen but hurts in new ones (Chhattisgarh -0.05 -> -0.29), so it fits the training states
 more closely without learning more about wealth. Training length is not the bottleneck;
 the inputs are. Next: add night lights as an input.
+
+## Run 3: night lights added (3 Oct 2026)
+`src/export_nightlights.py` gets VIIRS 2012 (Apr-Dec mean) and DMSP 2011 brightness over each
+tile's square. Fed to the CNN next to the image features, added to the ridge baseline, and
+used alone as a third model. 8 epochs. Files in outputs/lights/.
+
+| Model | Cross-fit R² | Within-state Spearman (cross-fit / unseen state) | Unseen-state R² | Shrink factor (RD sample) |
+|---|---|---|---|---|
+| CNN, images only (main) | 0.199 | 0.40 / 0.34 | 0.088 | 0.21 |
+| CNN + night lights | 0.144 | 0.41 / 0.37 | 0.099 | 0.22 |
+| Ridge + night lights | 0.187 | 0.40 / 0.37 | 0.114 | 0.16 |
+| Night lights only | 0.101 | 0.34 / 0.33 | 0.068 | 0.09 |
+
+- Night lights help most in states the model has not seen (ranking 0.34 -> 0.37).
+- The CNN + lights R² drop comes from one cross-fit fold: in Rajasthan's desert districts
+  (Barmer, Bikaner, Churu) it overestimates consumption by 0.6-0.7 log points, where the
+  images-only model was unbiased. Ranking elsewhere is unaffected.
+- RD with CNN + lights: -0.010, 95% CI [-0.053, +0.033]; no road-visibility jump.
+- Ridge gives a "significant" negative road effect in every run (about -0.035, CI just
+  excluding 0) that the survey does not show: a simple model can produce a false finding.
+
+Decision: images-only CNN stays the main model; the others are reported as robustness.
+Main finding: across every model tried, satellite estimates show only 9-22% of a true
+difference in consumption, so the satellite RD could only detect large road effects.
+Model tuning stops here. Next: write-up and map.
