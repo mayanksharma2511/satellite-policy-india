@@ -6,8 +6,8 @@ For every village in the six states it combines:
   - whether and when it got a PMGSY road (records end in 2015)
 
 Within each district, villages are ranked on 2012 poverty and on brightening since.
-"Left behind" = among the poorest 30% of the district in 2012 AND among the 30% that
-brightened least since (villages of 100+ people only). These are the villages to check first, not a verdict: night
+"Left behind" = among the poorest 30% of the district in 2012 AND among the 30% darkest
+at night today (average of the latest three years) (villages of 100+ people only). These are the villages to check first, not a verdict: night
 lights pick up electrification and large changes, not small changes in income.
 
 Also writes the numbers behind the "How far to trust this" page.
@@ -23,7 +23,7 @@ import pandas as pd
 VILLAGES = Path("data/processed/villages.csv.gz")
 LIGHTS = Path("data/processed/lights_by_year.csv")
 OUT = Path("docs/data")
-POOR, SLOW = 0.70, 0.30  # poorest 30% in 2012, slowest-brightening 30% since
+POOR, DARK = 0.70, 0.30  # poorest 30% in 2012, darkest 30% today
 MIN_POP = 100  # survey rates for tiny hamlets are too noisy to flag
 
 
@@ -41,9 +41,10 @@ def main():
     district = d["state_name"] + "|" + d["district_name"]
     d["poor_rank"] = d.groupby(district)["secc_pov_rate_rural"].rank(pct=True)
     d["growth_rank"] = d.groupby(district)["growth"].rank(pct=True)
+    d["now_rank"] = d.groupby(district)["now"].rank(pct=True)
     big = d["pc11_pca_tot_p"].fillna(0) >= MIN_POP
-    d["left_behind"] = big & (d["poor_rank"] >= POOR) & (d["growth_rank"] <= SLOW)
-    d["poor_rising"] = big & (d["poor_rank"] >= POOR) & (d["growth_rank"] >= 1 - SLOW)
+    d["left_behind"] = big & (d["poor_rank"] >= POOR) & (d["now_rank"] <= DARK)
+    d["poor_rising"] = big & (d["poor_rank"] >= POOR) & (d["now_rank"] >= 1 - DARK)
     d["road_year"] = pd.to_datetime(d["road_comp_date_new"], errors="coerce").dt.year
 
     (OUT / "d").mkdir(parents=True, exist_ok=True)

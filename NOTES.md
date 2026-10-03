@@ -72,6 +72,6 @@ Model tuning stops here. Next: write-up and map.
   done by 2015; village + district-by-year FE; flat before the road, rises slowly to about +0.01
   log(1+lights) after 8-12 years -> results/lights_after_road.csv.
 - `src/build_tracker.py` -> docs/data (207,576 villages with survey data, 190 districts).
-  Left behind = poorest 30% of district in 2012 (SECC poverty rate) and slowest 30% to brighten
-  (2012-14 vs 2023-25), villages of 100+ people: 19,827 flagged.
+  Left behind = poorest 30% of district in 2012 (SECC poverty rate) and darkest 30% today (latest 3 years); first version used slowest 30% to brighten, changed because flagged villages ended as bright as the district
+  villages of 100+ people: 24,978 flagged.
 - Website in docs/ (GitHub Pages): index.html (tracker, CSV download), trust.html (findings, slider).

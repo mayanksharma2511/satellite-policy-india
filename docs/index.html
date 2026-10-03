@@ -17,7 +17,7 @@
 <div class="app">
   <aside class="side">
     <div class="hero">
-      <b id="heroNum">19,827 villages</b> across six states were among the poorest in their district in 2012 and have barely brightened at night since. This tool finds them, district by district.
+      <b id="heroNum">19,827 villages</b> across six states were among the poorest in their district in 2012 and are still among the darkest at night today. This tool finds them, district by district.
     </div>
     <ol class="how">
       <li><b>Pick a district.</b></li>
@@ -45,11 +45,11 @@
       <summary>Change who counts as left behind</summary>
       <label class="f" for="poor">Among the poorest <b id="poorv">30%</b> of the district in 2012</label>
       <input type="range" id="poor" min="5" max="60" step="5" value="30">
-      <label class="f" for="slow">and the <b id="slowv">30%</b> that brightened least since</label>
+      <label class="f" for="slow">and among the <b id="slowv">30%</b> darkest at night today</label>
       <input type="range" id="slow" min="5" max="60" step="5" value="30">
       <label class="f" for="minpop">Ignore villages smaller than <b id="minpopv">100</b> people</label>
       <input type="range" id="minpop" min="0" max="1000" step="50" value="100">
-      <p class="note">Night brightness is compared within the district: the average of 2012–14 against the latest three years, measured by the VIIRS satellite.</p>
+      <p class="note">Night brightness today is the average of the latest three years (VIIRS satellite), compared with other villages in the same district.</p>
     </details>
 
     <h2>Is the district catching up?</h2>
@@ -73,7 +73,7 @@
       <select id="color" class="small">
         <option value="status">Status</option>
         <option value="poverty">Poverty rate 2012</option>
-        <option value="growth">Brightening since 2012</option>
+        <option value="growth">Brightness at night today</option>
       </select>
       <button class="btn ghost small" id="dl">Download CSV</button>
     </div>
@@ -84,7 +84,7 @@
         <thead><tr>
           <th data-k="rank" class="n">#</th><th data-k="name">Village</th><th data-k="pop" class="n">People</th>
           <th data-k="pov" class="n">Poor in 2012</th><th data-k="ratio" class="n">Brightness now vs 2012–14</th>
-          <th data-k="growth_rank" class="n">Brightened more than</th><th data-k="road" class="n">Road built</th><th>Brightness 2012–25</th>
+          <th data-k="now_rank" class="n">Brighter today than</th><th data-k="road" class="n">Road built</th><th>Brightness 2012–25</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -108,6 +108,10 @@ const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/service
 const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   { maxZoom: 18, attribution: "© OpenStreetMap contributors" });
 L.control.layers({ "Satellite (today)": imagery, "Streets": streets }).addTo(map);
+const ZoomHome = L.Control.extend({ onAdd() {
+  const b = L.DomUtil.create("button", "homebtn"); b.textContent = "Zoom to district"; b.title = "Zoom to the whole district";
+  L.DomEvent.on(b, "click", e => { L.DomEvent.stop(e); if (D) fitDistrict(); }); return b; } });
+new ZoomHome({ position: "topleft" }).addTo(map);
 
 // ---------- loading
 fetch("data/districts.json").then(r => r.json()).then(list => {
@@ -135,6 +139,8 @@ function loadDistrict(id) {
     const f = data.fields;
     D = { id, years: data.years, name: $("district").selectedOptions[0].text.split(" · ")[0],
           villages: data.villages.map((row, i) => { const v = { i }; f.forEach((k, j) => v[k] = row[j]); v.ratio = v.now / Math.max(v.base, 0.05); return v; }) };
+    const byNow = D.villages.slice().sort((a, b) => a.now - b.now);
+    byNow.forEach((v, k) => v.now_rank = (k + 1) / byNow.length);
     const rs = D.villages.map(v => v.ratio).sort((x, y) => x - y); D.medRatio = rs[Math.floor(rs.length / 2)];
     chosen = null; $("detail").innerHTML = ""; $("search").value = ""; $("results").innerHTML = "";
     update(true);
@@ -146,12 +152,12 @@ function classify() {
   const poor = 1 - $("poor").value / 100, slow = $("slow").value / 100, minpop = +$("minpop").value;
   for (const v of D.villages) {
     const big = (v.pop || 0) >= minpop;
-    v.status = big && v.poor_rank >= poor && v.growth_rank <= slow ? "behind"
-      : big && v.poor_rank >= poor && v.growth_rank >= 1 - slow ? "rising" : "other";
+    v.status = big && v.poor_rank >= poor && v.now_rank <= slow ? "behind"
+      : big && v.poor_rank >= poor && v.now_rank >= 1 - slow ? "rising" : "other";
     v.rank = null;
   }
   const behind = D.villages.filter(v => v.status === "behind")
-    .sort((a, b) => b.pov - a.pov || a.growth_rank - b.growth_rank);
+    .sort((a, b) => b.pov - a.pov || a.now_rank - b.now_rank);
   behind.forEach((v, k) => v.rank = k + 1);
   return behind;
 }
@@ -175,10 +181,22 @@ function update(fit) {
 $("color").onchange = () => drawMap(false);
 
 // ---------- map
+// Fit the map to the district; refit when the map's size settles (Safari lays out late).
+let fitPending = false;
+function fitDistrict() {
+  fitPending = true;
+  map.invalidateSize();
+  map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] });
+  setTimeout(() => { fitPending = false; }, 1500);
+}
+new ResizeObserver(() => {
+  map.invalidateSize();
+  if (fitPending && D) map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] });
+}).observe($("map"));
 function colourOf(v) {
   const mode = $("color").value;
   if (mode === "poverty") return ramp(v.pov);
-  if (mode === "growth") return ramp(1 - v.growth_rank);
+  if (mode === "growth") return ramp(1 - v.now_rank);
   return { pick: C.pick, behind: C.behind, rising: C.rising, other: C.other }[v.status];
 }
 function ramp(t) { // light yellow -> deep red
@@ -195,10 +213,10 @@ function drawMap(fit) {
     weight: v.status === "pick" ? 2 : status && v.status === "other" ? 0 : 0.5, color: "#fff",
     fillColor: colourOf(v), fillOpacity: status && v.status === "other" ? 0.55 : 0.95
   }).bindTooltip(`${v.name || "(unnamed)"} · ${pct(v.pov)} poor`).on("click", () => showVillage(v)))).addTo(map);
-  if (fit) { map.invalidateSize(); setTimeout(() => map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] }), 50); }
+  if (fit) fitDistrict();
   $("maplegend").innerHTML = status
-    ? `<span><i style="background:${C.pick}"></i>Your ${$("sN").textContent} priority villages</span><span><i style="background:${C.behind}"></i>Left behind</span><span><i style="background:${C.rising}"></i>Poor but brightening fast</span><span><i style="background:${C.other}"></i>Other</span>`
-    : `<span>${$("color").value === "poverty" ? "Poverty rate 2012" : "Brightening since 2012"}:</span><span><i style="background:${ramp(0)}"></i>${$("color").value === "poverty" ? "low" : "most"}</span><span><i style="background:${ramp(1)}"></i>${$("color").value === "poverty" ? "high" : "least"}</span>`;
+    ? `<span><i style="background:${C.pick}"></i>Your ${$("sN").textContent} priority villages</span><span><i style="background:${C.behind}"></i>Left behind</span><span><i style="background:${C.rising}"></i>Poor in 2012, now among the brightest</span><span><i style="background:${C.other}"></i>Other</span>`
+    : `<span>${$("color").value === "poverty" ? "Poverty rate 2012" : "Brightness today"}:</span><span><i style="background:${ramp(0)}"></i>${$("color").value === "poverty" ? "low" : "brightest"}</span><span><i style="background:${ramp(1)}"></i>${$("color").value === "poverty" ? "high" : "darkest"}</span>`;
 }
 
 // ---------- table
@@ -216,7 +234,7 @@ function drawTable(behind) {
   $("tablenote").textContent = `${behind.length.toLocaleString("en-IN")} left-behind villages in ${D.name}. The first ${Math.min(n, behind.length)} by poverty rate (highlighted) are your priority villages. Click a column to sort, a row to see it on the map.`;
   $("table").querySelector("tbody").innerHTML = rows.map(v => `<tr data-i="${v.i}" class="${v.rank <= n ? "pick" : ""}">
     <td class="n">${v.rank}</td><td>${v.name || "(unnamed)"}</td><td class="n">${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td>
-    <td class="n">${pct(v.pov)}</td><td class="n">${ratio(v)}</td><td class="n">${pct(v.growth_rank)} of district</td><td class="n">${v.road || "–"}</td>
+    <td class="n">${pct(v.pov)}</td><td class="n">${ratio(v)}</td><td class="n">${pct(v.now_rank)} of district</td><td class="n">${v.road || "–"}</td>
     <td>${spark(v.lights, 90, 22, v.road)}</td></tr>`).join("");
 }
 $("table").querySelector("tbody").onclick = e => {
@@ -248,11 +266,11 @@ function drawTrend(behind) {
 // ---------- village detail
 function focus(v) { map.setView([v.lat, v.lon], 14); showVillage(v); }
 function showVillage(v) {
-  const label = { pick: "Priority village (left behind)", behind: "Left behind", rising: "Poor in 2012, brightening fast", other: "" }[v.status];
+  const label = { pick: "Priority village (left behind)", behind: "Left behind", rising: "Poor in 2012, now among the brightest", other: "" }[v.status];
   const html = `<div class="card">
     <h3>${v.name || "(unnamed village)"}</h3>
     ${label ? `<p class="tag" style="color:${C[v.status === "pick" ? "pick" : v.status]}">${label}${v.rank ? ` · #${v.rank} in district` : ""}</p>` : ""}
-    ${v.status === "pick" || v.status === "behind" ? `<p class="why">Why it's on the list: in 2012 it was poorer than ${pct(v.poor_rank)} of villages in the district, and since then it has brightened less than ${pct(1 - v.growth_rank)} of them (${ratio(v)} against a typical ${D.medRatio.toFixed(1)}× in this district).</p>` : ""}
+    ${v.status === "pick" || v.status === "behind" ? `<p class="why">Why it's on the list: in 2012 it was poorer than ${pct(v.poor_rank)} of villages in the district, and today it is darker at night than ${pct(1 - v.now_rank)} of them. Its brightness has changed ${ratio(v)} since 2012–14, against a typical ${D.medRatio.toFixed(1)}× in the district.</p>` : ""}
     <table>
       <tr><td>People (2011)</td><td>${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td></tr>
       <tr><td>Share of people poor (2012)</td><td>${pct(v.pov)}</td></tr>
@@ -291,10 +309,10 @@ $("seeList").onclick = () => { showTab("table"); if (innerWidth < 760) $("tablew
 $("dl").onclick = () => {
   if (!D) return;
   const head = ["priority_rank", "village", "latitude", "longitude", "population_2011", "poverty_rate_2012", "consumption_pc_2012",
-    "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightening_rank_in_district", "pmgsy_road_year", "status"];
+    "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightness_today_rank_in_district", "pmgsy_road_year", "status"];
   const rows = D.villages.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || b.pov - a.pov).map(v =>
     [v.rank ?? "", `"${(v.name || "").replace(/"/g, "'")}"`, v.lat, v.lon, v.pop ?? "", v.pov, v.cons ?? "", v.poor_rank,
-     v.base, v.now, v.growth_rank, v.road ?? "", v.status === "pick" ? "priority" : v.status].join(","));
+     v.base, v.now, v.now_rank, v.road ?? "", v.status === "pick" ? "priority" : v.status].join(","));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" }));
   a.download = `${D.id}_villages.csv`; a.click();

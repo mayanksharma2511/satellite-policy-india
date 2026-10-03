@@ -122,3 +122,5 @@ ol.how b { color: var(--ink); }
 details.criteria { margin: 16px 0 4px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 details.criteria summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 .why { background: #fff; border-radius: 6px; padding: 6px 8px; margin: 0 0 8px; font-size: 12.5px; }
+
+.homebtn { background: #fff; border: 2px solid rgba(0,0,0,.2); border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer; }
