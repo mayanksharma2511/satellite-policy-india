@@ -4,7 +4,7 @@
 
 India's last village-level data on household wealth is the 2011–12 Socio-Economic and Caste Census (SECC). Anyone choosing villages for a programme today, such as an NGO or a company's CSR team, is working from data that is 14 years old. This project does two things:
 
-1. **A tool.** For about 207,000 villages in six states, it combines each village's 2012 poverty rate with night-time brightness measured by satellite every year from 2012 to 2025. It shortlists villages that were among the poorest in their district in 2012 and are still among the darkest at night today. Users pick a district and a number of villages they can reach, and get a ranked list. They can view it on a map or as a table, and download it with tehsil names and Google Maps links.
+1. **A tool.** For about 207,000 villages in six states, it combines each village's 2012 poverty rate with night-time brightness measured by satellite every year from 2012 to 2025. It shortlists villages that were among the poorest in their district in 2012 and are still among the darkest at night today. With the default settings it flags 24,978 villages. Users pick a district and a number of villages they can reach, and get a ranked list. They can view it on a map or as a table, and download it with tehsil names and Google Maps links.
 2. **A test of how far satellite estimates can be trusted.** I trained a CNN to estimate village consumption from Landsat images. I then re-ran a published study of India's rural roads programme (Asher & Novosad, *American Economic Review*, 2020) with the satellite estimates in place of the survey, to see whether they reach the same conclusion.
 
 ## Main findings
