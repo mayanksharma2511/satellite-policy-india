@@ -41,9 +41,9 @@
     </div>
     <button class="btn" id="seeList" style="width:100%">See the priority list →</button>
 
-    <label class="f">How strict should the list be?</label>
+    <label class="f">Which villages should the list include?</label>
     <div class="seg" id="strict">
-      <button data-v="20">Strict</button><button data-v="30" class="on">Standard</button><button data-v="40">Broad</button>
+      <button data-v="20">Most urgent only</button><button data-v="30" class="on">Recommended</button><button data-v="40">Wider search</button>
     </div>
     <p class="note" id="strictNote"></p>
 
@@ -162,7 +162,10 @@ function classify() {
 function update(fit) {
   if (!D) return;
   $("budgetv").textContent = $("budget").value;
-  $("strictNote").textContent = `Left behind = among the poorest ${level}% of villages in the district in 2012 and the darkest ${level}% at night today (villages of ${MINPOP}+ people).`;
+  $("strictNote").textContent = ({ 20: "The clearest cases: fewer villages, all of them among the very poorest and darkest in the district.",
+    30: "A balance between finding enough villages and keeping only clear cases.",
+    40: "More villages, including some borderline ones. Useful if you can visit more places." })[level] +
+    ` (Left behind = among the poorest ${level}% of villages in the district in 2012 and the darkest ${level}% at night today; villages of ${MINPOP}+ people.)`;
   const behind = classify(), n = +$("budget").value, picks = behind.slice(0, n);
   picks.forEach(v => v.status = "pick");
   const people = a => a.reduce((s, v) => s + (v.pop || 0), 0);
