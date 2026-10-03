@@ -41,16 +41,11 @@
     </div>
     <button class="btn" id="seeList" style="width:100%">See the priority list →</button>
 
-    <details class="criteria">
-      <summary>Change who counts as left behind</summary>
-      <label class="f" for="poor">Among the poorest <b id="poorv">30%</b> of the district in 2012</label>
-      <input type="range" id="poor" min="5" max="60" step="5" value="30">
-      <label class="f" for="slow">and among the <b id="slowv">30%</b> darkest at night today</label>
-      <input type="range" id="slow" min="5" max="60" step="5" value="30">
-      <label class="f" for="minpop">Ignore villages smaller than <b id="minpopv">100</b> people</label>
-      <input type="range" id="minpop" min="0" max="1000" step="50" value="100">
-      <p class="note">Night brightness today is the average of the latest three years (VIIRS satellite), compared with other villages in the same district.</p>
-    </details>
+    <label class="f">How strict should the list be?</label>
+    <div class="seg" id="strict">
+      <button data-v="20">Strict</button><button data-v="30" class="on">Standard</button><button data-v="40">Broad</button>
+    </div>
+    <p class="note" id="strictNote"></p>
 
     <h2>Is the district catching up?</h2>
     <div id="trend"></div>
@@ -148,8 +143,10 @@ function loadDistrict(id) {
 }
 
 // ---------- classification (recomputed live from the sliders)
+let level = 30;
+const MINPOP = 100; // survey rates for tiny hamlets are too noisy
 function classify() {
-  const poor = 1 - $("poor").value / 100, slow = $("slow").value / 100, minpop = +$("minpop").value;
+  const poor = 1 - level / 100, slow = level / 100, minpop = MINPOP;
   for (const v of D.villages) {
     const big = (v.pop || 0) >= minpop;
     v.status = big && v.poor_rank >= poor && v.now_rank <= slow ? "behind"
@@ -164,7 +161,8 @@ function classify() {
 
 function update(fit) {
   if (!D) return;
-  ["poor", "slow", "minpop", "budget"].forEach(k => $(k + "v").textContent = k === "minpop" || k === "budget" ? $(k).value : $(k).value + "%");
+  $("budgetv").textContent = $("budget").value;
+  $("strictNote").textContent = `Left behind = among the poorest ${level}% of villages in the district in 2012 and the darkest ${level}% at night today (villages of ${MINPOP}+ people).`;
   const behind = classify(), n = +$("budget").value, picks = behind.slice(0, n);
   picks.forEach(v => v.status = "pick");
   const people = a => a.reduce((s, v) => s + (v.pop || 0), 0);
@@ -177,7 +175,13 @@ function update(fit) {
   $("tabN").textContent = `(${behind.length})`;
   drawMap(fit); drawTable(behind); drawTrend(behind);
 }
-["poor", "slow", "minpop", "budget"].forEach(k => $(k).oninput = () => update(false));
+$("budget").oninput = () => update(false);
+$("strict").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  level = +b.dataset.v;
+  $("strict").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  update(false);
+};
 $("color").onchange = () => drawMap(false);
 
 // ---------- map
@@ -308,13 +312,18 @@ $("seeList").onclick = () => { showTab("table"); if (innerWidth < 760) $("tablew
 
 $("dl").onclick = () => {
   if (!D) return;
-  const head = ["priority_rank", "village", "latitude", "longitude", "population_2011", "poverty_rate_2012", "consumption_pc_2012",
-    "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightness_today_rank_in_district", "pmgsy_road_year", "status"];
-  const rows = D.villages.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || b.pov - a.pov).map(v =>
-    [v.rank ?? "", `"${(v.name || "").replace(/"/g, "'")}"`, v.lat, v.lon, v.pop ?? "", v.pov, v.cons ?? "", v.poor_rank,
-     v.base, v.now, v.now_rank, v.road ?? "", v.status === "pick" ? "priority" : v.status].join(","));
+  const state = $("state").value, district = D.name;
+  const label = { pick: "Priority (left behind)", behind: "Left behind", rising: "Poor in 2012, now among the brightest", other: "" };
+  const q = x => `"${String(x ?? "").replace(/"/g, "'")}"`;
+  const head = ["Priority rank", "Village", "District", "State", "Status", "People (2011)", "Share poor (2012)",
+    "Poorer than (% of district villages, 2012)", "Darker at night than (% of district villages, today)",
+    "Night brightness now vs 2012-14", "PMGSY road built", "Latitude", "Longitude", "Google Maps"];
+  const rows = D.villages.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || b.pov - a.pov).map(v => [
+    v.rank ?? "", q(v.name), q(district), q(state), q(label[v.status]), v.pop ?? "", pct(v.pov),
+    pct(v.poor_rank), pct(1 - v.now_rank), ratio(v), v.road ?? "", v.lat, v.lon,
+    q(`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lon}`)].join(","));
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" }));
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + [head.map(q).join(","), ...rows].join("\n")], { type: "text/csv" }));
   a.download = `${D.id}_villages.csv`; a.click();
 };
 </script>
