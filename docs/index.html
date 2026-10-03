@@ -16,35 +16,45 @@
 
 <div class="app">
   <aside class="side">
-    <p class="lede">India's last village-level data on household wealth is from 2011–12. This tool combines it with night-time brightness measured by satellite every year since, to find villages that were poor then and have barely changed.</p>
+    <div class="hero">
+      <b id="heroNum">19,827 villages</b> across six states were among the poorest in their district in 2012 and have barely brightened at night since. This tool finds them, district by district.
+    </div>
+    <ol class="how">
+      <li><b>Pick a district.</b></li>
+      <li><b>Say how many villages you can reach.</b> The tool picks the poorest of the left-behind villages.</li>
+      <li><b>Check the list</b> in the Priority list tab, click any village for details, or download it.</li>
+    </ol>
 
     <label class="f" for="state">State</label>
     <select id="state"></select>
     <label class="f" for="district">District</label>
     <select id="district"></select>
 
-    <h2>Who counts as left behind?</h2>
-    <label class="f" for="poor">Among the poorest <b id="poorv">30%</b> of the district in 2012</label>
-    <input type="range" id="poor" min="5" max="60" step="5" value="30">
-    <label class="f" for="slow">and the <b id="slowv">30%</b> that brightened least since</label>
-    <input type="range" id="slow" min="5" max="60" step="5" value="30">
-    <label class="f" for="minpop">Ignore villages smaller than <b id="minpopv">100</b> people</label>
-    <input type="range" id="minpop" min="0" max="1000" step="50" value="100">
-
-    <h2>Plan a programme</h2>
     <label class="f" for="budget">I can reach <b id="budgetv">25</b> villages</label>
     <input type="range" id="budget" min="5" max="200" step="5" value="25">
 
     <div class="stats">
-      <div class="stat"><b id="sFlag">–</b><small>villages left behind (of <span id="sAll">–</span>)</small></div>
-      <div class="stat"><b id="sPeople">–</b><small>people in them (2011)</small></div>
-      <div class="stat"><b id="sPick">–</b><small>people in your <span id="sN">25</span> priority villages</small></div>
-      <div class="stat"><b id="sPov">–</b><small>average poverty rate (2012) in those villages</small></div>
+      <div class="stat"><b id="sPick">–</b><small>people live in your <span id="sN">25</span> priority villages</small></div>
+      <div class="stat"><b id="sPov">–</b><small>were poor in 2012 in those villages, on average</small></div>
+      <div class="stat"><b id="sFlag">–</b><small>villages left behind in this district (of <span id="sAll">–</span>)</small></div>
+      <div class="stat"><b id="sPeople">–</b><small>people live in them (2011)</small></div>
     </div>
+    <button class="btn" id="seeList" style="width:100%">See the priority list →</button>
 
-    <h2>District trend</h2>
+    <details class="criteria">
+      <summary>Change who counts as left behind</summary>
+      <label class="f" for="poor">Among the poorest <b id="poorv">30%</b> of the district in 2012</label>
+      <input type="range" id="poor" min="5" max="60" step="5" value="30">
+      <label class="f" for="slow">and the <b id="slowv">30%</b> that brightened least since</label>
+      <input type="range" id="slow" min="5" max="60" step="5" value="30">
+      <label class="f" for="minpop">Ignore villages smaller than <b id="minpopv">100</b> people</label>
+      <input type="range" id="minpop" min="0" max="1000" step="50" value="100">
+      <p class="note">Night brightness is compared within the district: the average of 2012–14 against the latest three years, measured by the VIIRS satellite.</p>
+    </details>
+
+    <h2>Is the district catching up?</h2>
     <div id="trend"></div>
-    <p class="note">Median night brightness by year. <span style="color:var(--behind)">■</span> left-behind villages <span style="color:var(--other)">■</span> all villages in the district.</p>
+    <p class="note">Typical night brightness each year. <span style="color:var(--behind)">■</span> left-behind villages <span style="color:var(--other)">■</span> all villages in the district.</p>
 
     <div id="detail"></div>
 
@@ -55,7 +65,7 @@
   <section class="main">
     <div class="tabs">
       <button class="tab on" data-tab="map">Map</button>
-      <button class="tab" data-tab="table">Priority list</button>
+      <button class="tab" data-tab="table">Priority list <span id="tabN"></span></button>
       <input id="search" type="search" placeholder="Find a village in this district…" autocomplete="off">
       <div id="results" class="results"></div>
       <span class="spacer"></span>
@@ -73,8 +83,8 @@
       <table class="t" id="table">
         <thead><tr>
           <th data-k="rank" class="n">#</th><th data-k="name">Village</th><th data-k="pop" class="n">People</th>
-          <th data-k="pov" class="n">Poverty 2012</th><th data-k="base" class="n">Brightness 2012–14</th>
-          <th data-k="now" class="n">Latest</th><th data-k="road" class="n">Road</th><th>Trend</th>
+          <th data-k="pov" class="n">Poor in 2012</th><th data-k="ratio" class="n">Brightness now vs 2012–14</th>
+          <th data-k="growth_rank" class="n">Brightened more than</th><th data-k="road" class="n">Road built</th><th>Brightness 2012–25</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -87,6 +97,7 @@
 const $ = id => document.getElementById(id);
 const pct = x => Math.round(x * 100) + "%";
 const fmt = n => n >= 1e5 ? (n / 1e5).toFixed(1) + " lakh" : n.toLocaleString("en-IN");
+const ratio = v => v.ratio.toFixed(1) + "×";
 const C = { behind: "#c8414b", pick: "#7a1f3d", rising: "#e09f3e", other: "#8e9aa3" };
 
 let districts = [], D = null, layer = null, sortKey = "rank", sortDir = 1, chosen = null;
@@ -101,6 +112,7 @@ L.control.layers({ "Satellite (today)": imagery, "Streets": streets }).addTo(map
 // ---------- loading
 fetch("data/districts.json").then(r => r.json()).then(list => {
   districts = list;
+  $("heroNum").textContent = list.reduce((s, d) => s + d.left_behind, 0).toLocaleString("en-IN") + " villages";
   const states = [...new Set(list.map(d => d.state))].sort();
   $("state").innerHTML = states.map(s => `<option>${s}</option>`).join("");
   const start = list.find(d => d.id === location.hash.slice(1)) || list.find(d => d.id === "odisha_mayurbhanj") || list[0];
@@ -122,7 +134,8 @@ function loadDistrict(id) {
   fetch(`data/d/${id}.json`).then(r => r.json()).then(data => {
     const f = data.fields;
     D = { id, years: data.years, name: $("district").selectedOptions[0].text.split(" · ")[0],
-          villages: data.villages.map((row, i) => { const v = { i }; f.forEach((k, j) => v[k] = row[j]); return v; }) };
+          villages: data.villages.map((row, i) => { const v = { i }; f.forEach((k, j) => v[k] = row[j]); v.ratio = v.now / Math.max(v.base, 0.05); return v; }) };
+    const rs = D.villages.map(v => v.ratio).sort((x, y) => x - y); D.medRatio = rs[Math.floor(rs.length / 2)];
     chosen = null; $("detail").innerHTML = ""; $("search").value = ""; $("results").innerHTML = "";
     update(true);
   });
@@ -155,6 +168,7 @@ function update(fit) {
   $("sN").textContent = Math.min(n, behind.length);
   $("sPick").textContent = fmt(people(picks));
   $("sPov").textContent = picks.length ? pct(picks.reduce((s, v) => s + v.pov, 0) / picks.length) : "–";
+  $("tabN").textContent = `(${behind.length})`;
   drawMap(fit); drawTable(behind); drawTrend(behind);
 }
 ["poor", "slow", "minpop", "budget"].forEach(k => $(k).oninput = () => update(false));
@@ -181,7 +195,7 @@ function drawMap(fit) {
     weight: v.status === "pick" ? 2 : status && v.status === "other" ? 0 : 0.5, color: "#fff",
     fillColor: colourOf(v), fillOpacity: status && v.status === "other" ? 0.55 : 0.95
   }).bindTooltip(`${v.name || "(unnamed)"} · ${pct(v.pov)} poor`).on("click", () => showVillage(v)))).addTo(map);
-  if (fit) map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] });
+  if (fit) { map.invalidateSize(); setTimeout(() => map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] }), 50); }
   $("maplegend").innerHTML = status
     ? `<span><i style="background:${C.pick}"></i>Your ${$("sN").textContent} priority villages</span><span><i style="background:${C.behind}"></i>Left behind</span><span><i style="background:${C.rising}"></i>Poor but brightening fast</span><span><i style="background:${C.other}"></i>Other</span>`
     : `<span>${$("color").value === "poverty" ? "Poverty rate 2012" : "Brightening since 2012"}:</span><span><i style="background:${ramp(0)}"></i>${$("color").value === "poverty" ? "low" : "most"}</span><span><i style="background:${ramp(1)}"></i>${$("color").value === "poverty" ? "high" : "least"}</span>`;
@@ -202,7 +216,7 @@ function drawTable(behind) {
   $("tablenote").textContent = `${behind.length.toLocaleString("en-IN")} left-behind villages in ${D.name}. The first ${Math.min(n, behind.length)} by poverty rate (highlighted) are your priority villages. Click a column to sort, a row to see it on the map.`;
   $("table").querySelector("tbody").innerHTML = rows.map(v => `<tr data-i="${v.i}" class="${v.rank <= n ? "pick" : ""}">
     <td class="n">${v.rank}</td><td>${v.name || "(unnamed)"}</td><td class="n">${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td>
-    <td class="n">${pct(v.pov)}</td><td class="n">${v.base}</td><td class="n">${v.now}</td><td class="n">${v.road || "–"}</td>
+    <td class="n">${pct(v.pov)}</td><td class="n">${ratio(v)}</td><td class="n">${pct(v.growth_rank)} of district</td><td class="n">${v.road || "–"}</td>
     <td>${spark(v.lights, 90, 22, v.road)}</td></tr>`).join("");
 }
 $("table").querySelector("tbody").onclick = e => {
@@ -235,19 +249,19 @@ function drawTrend(behind) {
 function focus(v) { map.setView([v.lat, v.lon], 14); showVillage(v); }
 function showVillage(v) {
   const label = { pick: "Priority village (left behind)", behind: "Left behind", rising: "Poor in 2012, brightening fast", other: "" }[v.status];
-  const road = v.road ? `PMGSY road completed ${v.road}` : "No PMGSY road recorded by 2015";
   const html = `<div class="card">
     <h3>${v.name || "(unnamed village)"}</h3>
     ${label ? `<p class="tag" style="color:${C[v.status === "pick" ? "pick" : v.status]}">${label}${v.rank ? ` · #${v.rank} in district` : ""}</p>` : ""}
+    ${v.status === "pick" || v.status === "behind" ? `<p class="why">Why it's on the list: in 2012 it was poorer than ${pct(v.poor_rank)} of villages in the district, and since then it has brightened less than ${pct(1 - v.growth_rank)} of them (${ratio(v)} against a typical ${D.medRatio.toFixed(1)}× in this district).</p>` : ""}
     <table>
       <tr><td>People (2011)</td><td>${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td></tr>
-      <tr><td>Poverty rate (2012)</td><td>${pct(v.pov)}</td></tr>
-      <tr><td>Poorer than</td><td>${pct(v.poor_rank)} of district villages</td></tr>
-      <tr><td>Brightness 2012–14 → latest</td><td>${v.base} → ${v.now}</td></tr>
-      <tr><td>Brightened more than</td><td>${pct(v.growth_rank)} of district villages</td></tr>
+      <tr><td>Share of people poor (2012)</td><td>${pct(v.pov)}</td></tr>
+      <tr><td>Night brightness now vs 2012–14</td><td>${ratio(v)}</td></tr>
+      <tr><td>Road</td><td>${v.road ? "built " + v.road : "none recorded by 2015"}</td></tr>
     </table>
     ${spark(v.lights, 300, 70, v.road)}
-    <p class="note" style="margin:4px 0 0">Night brightness ${D.years[0]}–${D.years[D.years.length - 1]}${v.road && v.road >= D.years[0] ? "; dashed line = road" : ""}. ${road}.</p>
+    <p class="note" style="margin:4px 0 0">Night brightness ${D.years[0]}–${D.years[D.years.length - 1]}${v.road && v.road >= D.years[0] ? "; dashed line = road built" : ""}.
+    <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lon}">Open in Google Maps ↗</a></p>
   </div>`;
   $("detail").innerHTML = html;
   L.popup({ maxWidth: 330 }).setLatLng([v.lat, v.lon]).setContent(html).openOn(map);
@@ -272,6 +286,7 @@ function showTab(t) {
   if (t === "map") setTimeout(() => map.invalidateSize(), 0);
 }
 document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+$("seeList").onclick = () => { showTab("table"); if (innerWidth < 760) $("tablewrap").scrollIntoView(); };
 
 $("dl").onclick = () => {
   if (!D) return;
