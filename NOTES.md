@@ -64,3 +64,14 @@ Decision: images-only CNN stays the main model; the others are reported as robus
 Main finding: across every model tried, satellite estimates show only 9-22% of a true
 difference in consumption, so the satellite RD could only detect large road effects.
 Model tuning stops here. Next: write-up and map.
+
+## Village progress tracker (3 Oct 2026)
+- `src/export_lights_timeseries.py`: VIIRS (VCMCFG) yearly median brightness 2012-2025, 2 km square,
+  all 217,305 villages -> data/processed/lights_by_year.csv. 2012 is Apr-Dec only; 2016 is a noisy year.
+- `src/lights_after_road.py`: event study, roads completed 2013-14 vs sanctioned 2011-13 but not
+  done by 2015; village + district-by-year FE; flat before the road, rises slowly to about +0.01
+  log(1+lights) after 8-12 years -> results/lights_after_road.csv.
+- `src/build_tracker.py` -> docs/data (207,576 villages with survey data, 190 districts).
+  Left behind = poorest 30% of district in 2012 (SECC poverty rate) and slowest 30% to brighten
+  (2012-14 vs 2023-25), villages of 100+ people: 19,827 flagged.
+- Website in docs/ (GitHub Pages): index.html (tracker, CSV download), trust.html (findings, slider).

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Village Progress Tracker</title>
+<meta name="description" content="Which villages have been left behind since India's last village-level survey? 2012 survey data plus night-time satellite lights, 2012 to today.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Village Progress Tracker <span>· six Indian states, 2012 to today</span></h1>
+  <nav><a class="on" href="index.html">Tracker</a><a href="trust.html">How far to trust this</a><a href="https://github.com/mayanksharma2511/satellite-policy-india">Code</a></nav>
+</header>
+
+<div class="app">
+  <aside class="side">
+    <p class="lede">India's last village-level data on household wealth is the 2011–12 survey. This tool shows where each village stood then, and how much brighter at night it has become since, measured by satellite every year. Villages that were poor and have barely brightened are flagged for a closer look.</p>
+
+    <label class="f" for="state">State</label>
+    <select id="state"></select>
+    <label class="f" for="district">District</label>
+    <select id="district"></select>
+
+    <div class="stats">
+      <div class="stat"><b id="nVill">–</b><small>villages</small></div>
+      <div class="stat"><b id="nBehind">–</b><small>flagged as left behind</small></div>
+    </div>
+
+    <div class="legend">
+      <div><span class="dot" style="background:var(--behind)"></span>Left behind: poorest 30% in 2012, slowest 30% to brighten since (villages of 100+ people)</div>
+      <div><span class="dot" style="background:var(--rising)"></span>Poor in 2012 but brightening fast</div>
+      <div><span class="dot" style="background:var(--other)"></span>Other villages</div>
+    </div>
+    <label class="f" for="show">Show on map</label>
+    <select id="show">
+      <option value="all">All villages</option>
+      <option value="poor">Only poor-in-2012 villages</option>
+      <option value="behind">Only left behind</option>
+    </select>
+
+    <div id="detail"></div>
+
+    <h2>Left-behind villages, poorest first</h2>
+    <p class="note">Ranked within this district. <button class="btn ghost" id="dl">Download CSV</button></p>
+    <div class="list" id="list"></div>
+
+    <div class="warn">A shortlist for checking on the ground, not a verdict. Night lights capture electrification and large changes in activity; they miss small changes in income. See <a href="trust.html">how far to trust this</a>.</div>
+    <p class="note">Data: SECC 2011–12 and Census via SHRUG (Development Data Lab); VIIRS night lights (NOAA/EOG); PMGSY road records (to 2015). Imagery basemap: Esri.</p>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const COLORS = ["#8e9aa3", "#e09f3e", "#c8414b"];
+let districts = [], current = null, layer = null, markers = [], selected = null;
+
+const map = L.map("map", { preferCanvas: true }).setView([22.5, 79], 5);
+const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 18, attribution: "Imagery © Esri, Maxar, Earthstar Geographics"
+}).addTo(map);
+const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 18, attribution: "© OpenStreetMap contributors"
+});
+L.control.layers({ "Satellite (today)": imagery, "Streets": streets }).addTo(map);
+
+const $ = id => document.getElementById(id);
+const pct = x => Math.round(x * 100) + "%";
+
+fetch("data/districts.json").then(r => r.json()).then(list => {
+  districts = list;
+  const states = [...new Set(list.map(d => d.state))].sort();
+  $("state").innerHTML = states.map(s => `<option>${s}</option>`).join("");
+  const fromHash = list.find(d => d.id === location.hash.slice(1));
+  const start = fromHash || list.find(d => d.id === "odisha_mayurbhanj") || list[0];
+  $("state").value = start.state;
+  fillDistricts(start.id);
+});
+
+function fillDistricts(pick) {
+  const ds = districts.filter(d => d.state === $("state").value).sort((a, b) => a.district.localeCompare(b.district));
+  $("district").innerHTML = ds.map(d => `<option value="${d.id}">${d.district} (${d.left_behind} flagged)</option>`).join("");
+  $("district").value = pick && ds.some(d => d.id === pick) ? pick : ds[0].id;
+  loadDistrict($("district").value);
+}
+$("state").onchange = () => fillDistricts();
+$("district").onchange = () => loadDistrict($("district").value);
+$("show").onchange = () => draw();
+
+function loadDistrict(id) {
+  history.replaceState(null, "", "#" + id);
+  fetch(`data/d/${id}.json`).then(r => r.json()).then(data => {
+    const f = Object.fromEntries(data.fields.map((n, i) => [n, i]));
+    current = {
+      id, years: data.years,
+      villages: data.villages.map(v => Object.fromEntries(Object.entries(f).map(([k, i]) => [k, v[i]])))
+    };
+    $("nVill").textContent = current.villages.length.toLocaleString();
+    $("nBehind").textContent = current.villages.filter(v => v.flag === 2).length.toLocaleString();
+    $("detail").innerHTML = "";
+    draw(true);
+    renderList();
+  });
+}
+
+function draw(fit) {
+  if (layer) map.removeLayer(layer);
+  const mode = $("show").value;
+  const vs = current.villages.filter(v =>
+    mode === "all" || (mode === "poor" && v.poor_rank >= 0.7) || (mode === "behind" && v.flag === 2));
+  markers = [];
+  layer = L.layerGroup(vs.sort((a, b) => a.flag - b.flag).map(v => {
+    const m = L.circleMarker([v.lat, v.lon], {
+      radius: v.flag ? 5 : 3, weight: v.flag ? 1 : 0, color: "#fff",
+      fillColor: COLORS[v.flag], fillOpacity: v.flag ? 0.95 : 0.6
+    }).on("click", () => showVillage(v));
+    m.village = v; markers.push(m);
+    return m;
+  })).addTo(map);
+  if (fit && vs.length) map.fitBounds(L.latLngBounds(vs.map(v => [v.lat, v.lon])), { padding: [20, 20] });
+}
+
+function renderList() {
+  const behind = current.villages.filter(v => v.flag === 2)
+    .sort((a, b) => b.pov - a.pov || a.growth_rank - b.growth_rank);
+  $("list").innerHTML = behind.slice(0, 200).map((v, i) =>
+    `<div class="row" data-i="${i}">${v.name || "(unnamed)"}<span>${pct(v.pov)} poor · ${v.base} → ${v.now}</span></div>`
+  ).join("") + (behind.length > 200 ? `<p class="note">Showing 200 of ${behind.length}; download the CSV for all.</p>` : "");
+  [...$("list").children].forEach(el => {
+    if (el.dataset.i !== undefined) el.onclick = () => {
+      const v = behind[+el.dataset.i];
+      map.setView([v.lat, v.lon], 14);
+      showVillage(v);
+    };
+  });
+}
+
+function sparkline(v, years) {
+  const w = 330, h = 90, p = 22, vals = v.lights, max = Math.max(...vals, 0.5);
+  const x = i => p + i * (w - 2 * p) / (vals.length - 1), y = val => h - 18 - (val / max) * (h - 30);
+  const path = vals.map((val, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(val).toFixed(1)}`).join("");
+  let road = "";
+  if (v.road && v.road >= years[0]) {
+    const rx = x(v.road - years[0]);
+    road = `<line x1="${rx}" x2="${rx}" y1="8" y2="${h - 18}" stroke="#1f6f78" stroke-dasharray="3 3"/><text x="${rx + 3}" y="14" font-size="10" fill="#1f6f78">road</text>`;
+  }
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Night brightness by year">
+    <path d="${path}" fill="none" stroke="#c8414b" stroke-width="2"/>${road}
+    <text x="${p}" y="${h - 4}" font-size="10" fill="#5f6b73">${years[0]}</text>
+    <text x="${w - p}" y="${h - 4}" font-size="10" fill="#5f6b73" text-anchor="end">${years[years.length - 1]}</text>
+    <text x="2" y="${y(max) + 4}" font-size="10" fill="#5f6b73">${max.toFixed(1)}</text></svg>`;
+}
+
+function showVillage(v) {
+  const label = ["", "Poor in 2012, brightening fast", "Left behind"][v.flag];
+  const road = v.road ? `PMGSY road completed ${v.road}` : "No PMGSY road recorded by 2015";
+  $("detail").innerHTML = `<div class="card">
+    <h3>${v.name || "(unnamed village)"}</h3>
+    ${label ? `<p class="note" style="color:${COLORS[v.flag]};font-weight:600;margin:0 0 6px">${label}</p>` : ""}
+    <table>
+      <tr><td>Population (2011)</td><td>${v.pop ? v.pop.toLocaleString() : "–"}</td></tr>
+      <tr><td>Poverty rate (2012 survey)</td><td>${pct(v.pov)}</td></tr>
+      <tr><td>Poorer than … of district villages</td><td>${pct(v.poor_rank)}</td></tr>
+      <tr><td>Night brightness 2012–14 → latest</td><td>${v.base} → ${v.now}</td></tr>
+      <tr><td>Brightened more than … of district villages</td><td>${pct(v.growth_rank)}</td></tr>
+    </table>
+    ${sparkline(v, current.years)}
+    <p class="note" style="margin:4px 0 0">Night brightness by year (nW/cm²/sr). ${road}.</p>
+  </div>`;
+}
+
+$("dl").onclick = () => {
+  if (!current) return;
+  const head = ["village", "latitude", "longitude", "population_2011", "poverty_rate_2012",
+    "consumption_pc_2012", "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightening_rank_in_district",
+    "pmgsy_road_year", "status"];
+  const status = ["other", "poor_brightening_fast", "left_behind"];
+  const rows = current.villages.slice().sort((a, b) => b.flag - a.flag || b.pov - a.pov).map(v =>
+    [`"${(v.name || "").replace(/"/g, "'")}"`, v.lat, v.lon, v.pop ?? "", v.pov, v.cons ?? "", v.poor_rank,
+     v.base, v.now, v.growth_rank, v.road ?? "", status[v.flag]].join(","));
+  const blob = new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${current.id}_villages.csv`;
+  a.click();
+};
+</script>
+</body>
+</html>

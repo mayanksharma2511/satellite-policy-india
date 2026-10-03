@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Far to Trust This</title>
+<meta name="description" content="Satellite estimates of village wealth, tested against survey data and a published study of India's rural roads programme.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Village Progress Tracker <span>· six Indian states, 2012 to today</span></h1>
+  <nav><a href="index.html">Tracker</a><a class="on" href="trust.html">How far to trust this</a><a href="https://github.com/mayanksharma2511/satellite-policy-india">Code</a></nav>
+</header>
+
+<main class="page">
+  <h2>How far to trust satellite estimates of village wealth</h2>
+  <p>Satellite images are increasingly used in place of surveys, both to choose where a programme should go and to judge afterwards whether it worked. Before building the tracker, I tested both uses on data where the right answer is known: India's 2011–12 village survey and a published study of its rural roads programme (Asher &amp; Novosad, <i>American Economic Review</i>, 2020).</p>
+
+  <div class="two">
+    <div class="box good"><h4>Choosing where to look: usable, with care</h4><p>A model trained on Landsat images ranks villages by wealth within a state a little better than night lights alone (rank correlation 0.40 against 0.34), and the two together do slightly better still. Good enough to build a shortlist for checking on the ground, not to judge one village.</p></div>
+    <div class="box bad"><h4>Judging whether a programme worked: risky</h4><p>Satellite estimates show only about a fifth of a real difference between villages. A study built on them can say "no effect" when there was one.</p></div>
+  </div>
+
+  <h3>Try it: would satellites have caught a real effect?</h3>
+  <p>The roads study compares villages just above and just below a population cut-off that made a new road much more likely. Below, pretend roads really did raise consumption by the amount you choose, and see what each version of the study would have concluded on the same <span id="n">16,024</span> villages.</p>
+  <div class="sim">
+    <label for="eff"><b>True effect of a road on consumption: <span id="effv">+15%</span></b></label>
+    <input type="range" id="eff" min="0" max="40" value="15" step="1">
+    <svg id="ci" viewBox="0 0 640 150" width="100%" role="img" aria-label="Estimates and 95% confidence intervals"></svg>
+    <div class="verdicts">
+      <div class="verdict" id="vs"></div>
+      <div class="verdict" id="vt"></div>
+    </div>
+    <p class="note" style="margin-top:10px">Bars are 95% confidence intervals. A study "finds an effect" when its bar does not cross zero. The starting points are the real estimates (survey −1.6%, satellite −1.6%); the pretend effect is added to the survey outcome in full and to the satellite outcome at the measured shrink factor of 0.21, which is how the satellite estimates respond to real differences in consumption.</p>
+  </div>
+
+  <h3>What the tests found</h3>
+  <table class="t">
+    <tr><th>Test</th><th>Result</th></tr>
+    <tr><td>Did the replication work?</td><td>Yes. Effect of a road on the share of people working in cultivation (2012): −0.141 (95% CI −0.291 to +0.010); the paper reports −0.092. No effect on consumption, as in the paper.</td></tr>
+    <tr><td>How well does the model rank villages it never saw?</td><td>Within-state rank correlation 0.40 (R² 0.20). In a state left out of training: 0.34 (R² 0.09).</td></tr>
+    <tr><td>Does the satellite version of the roads study agree?</td><td>Yes: −1.6% (95% CI −5.7% to +2.5%), same as the survey's −1.6%.</td></tr>
+    <tr><td>Is that agreement meaningful?</td><td>Weakly. The estimates move only 0.21× as much as real consumption, so this design could only detect a road effect of about 28%; the survey could detect about 14%.</td></tr>
+    <tr><td>Does a better model fix it?</td><td>No. Across five models (longer training, adding night lights, simpler models) the shrink factor stayed between 0.09 and 0.22.</td></tr>
+    <tr><td>Can it produce false findings?</td><td>Yes. A simpler model reported a "significant" harmful effect of roads (−3.5%, CI −6.6% to −0.4%) that the survey does not show.</td></tr>
+    <tr><td>Is the model just seeing the new road?</td><td>No. Its error does not jump at the cut-off (+0.000, CI −0.016 to +0.017).</td></tr>
+  </table>
+
+  <h3>Does the tracker's signal mean anything?</h3>
+  <p>If night lights measure real change, villages that got a road should brighten afterwards. The chart compares villages whose road was completed in 2013–14 with villages sanctioned a road around the same time that were still waiting in 2015, within the same district and year.</p>
+  <svg id="ev" viewBox="0 0 640 230" width="100%" role="img" aria-label="Change in night brightness by years since the road"></svg>
+  <p class="note">Change in log(1 + brightness), relative to the year before the road; bars are 95% intervals, clustered by district.</p>
+  <p>They do brighten, slowly: no difference before the road, then a small, steady rise (about 0.01 on the log scale after a decade). The signal responds to real events, but the effect of one road is small. So the tracker is best at spotting villages where very little has changed, not at measuring how much.</p>
+
+  <h3>Limits</h3>
+  <ul>
+    <li>Six states and one programme. This shows the problem can occur and how large it was here, not that satellite evaluation always fails.</li>
+    <li>The 2012 ranking is from a survey-based estimate (SECC), itself modelled, and is now 14 years old.</li>
+    <li>Night lights near rural levels are noisy, and the 2 km squares of neighbouring villages overlap, so neighbours often look alike.</li>
+    <li>The road records end in 2015.</li>
+  </ul>
+
+  <h3>Data and method</h3>
+  <p class="note">Survey, census and road data: SHRUG v2.2 (Development Data Lab). Images: Landsat 7 surface reflectance, dry season 2010–12 (USGS, via Google Earth Engine). Night lights: VIIRS monthly composites 2012–2025 (NOAA/EOG) and DMSP-OLS 2011. Model: ResNet-18 on 6-band 96×96 tiles, cross-fitted by district, plus a leave-one-state-out test. Roads study: fuzzy regression discontinuity at the 500 and 1,000 population cut-offs, bandwidth 84, triangular kernel, district × cut-off fixed effects, 2001 controls. Code and full results: <a href="https://github.com/mayanksharma2511/satellite-policy-india">GitHub</a>.</p>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+fetch("data/trust.json").then(r => r.json()).then(t => {
+  $("n").textContent = t.rd.n.toLocaleString();
+  const S = t.rd.survey, T = t.rd.satellite, k = t.shrink;
+  const svg = $("ci"), lo = -0.15, hi = 0.45, X = v => 70 + (v - lo) / (hi - lo) * 550;
+
+  function render() {
+    const d = +$("eff").value / 100;
+    $("effv").textContent = "+" + Math.round(d * 100) + "%";
+    const rows = [
+      { name: "Survey", est: S.est + d, se: S.se, c: "#1f6f78", y: 45 },
+      { name: "Satellite", est: T.est + k * d, se: T.se, c: "#c8414b", y: 100 }
+    ];
+    let g = "";
+    for (let v = -0.1; v <= 0.41; v += 0.1) {
+      g += `<line x1="${X(v)}" x2="${X(v)}" y1="18" y2="125" stroke="#e3e1da"/><text x="${X(v)}" y="142" font-size="11" text-anchor="middle" fill="#5f6b73">${Math.round(v * 100)}%</text>`;
+    }
+    g += `<line x1="${X(0)}" x2="${X(0)}" y1="12" y2="125" stroke="#1d2327" stroke-width="1.5"/>`;
+    g += `<line x1="${X(d)}" x2="${X(d)}" y1="12" y2="125" stroke="#5f6b73" stroke-dasharray="4 4"/><text x="${X(d) + 4}" y="12" font-size="11" fill="#5f6b73">true effect</text>`;
+    for (const r of rows) {
+      const a = r.est - 1.96 * r.se, b = r.est + 1.96 * r.se;
+      g += `<text x="0" y="${r.y + 4}" font-size="13" fill="${r.c}" font-weight="600">${r.name}</text>
+        <line x1="${X(a)}" x2="${X(b)}" y1="${r.y}" y2="${r.y}" stroke="${r.c}" stroke-width="6" stroke-linecap="round" opacity=".35"/>
+        <circle cx="${X(r.est)}" cy="${r.y}" r="6" fill="${r.c}"/>`;
+      r.found = a > 0;
+      r.text = `${r.est >= 0 ? "+" : ""}${(r.est * 100).toFixed(1)}% (CI ${(a * 100).toFixed(1)}% to ${(b * 100).toFixed(1)}%)`;
+    }
+    svg.innerHTML = g;
+    const say = r => `<b style="color:${r.c}">${r.name} study: ${r.found ? "finds an effect" : "no effect found"}</b>${r.text}`;
+    $("vs").innerHTML = say(rows[0]);
+    $("vt").innerHTML = say(rows[1]);
+  }
+  $("eff").oninput = render;
+  render();
+
+  const e = t.lights_after_road, ev = $("ev");
+  const n = e.event_time.length, ymax = 0.025, ymin = -0.01;
+  const ex = i => 60 + i * 560 / (n - 1), ey = v => 200 - (v - ymin) / (ymax - ymin) * 180;
+  let s = "";
+  for (let v = -0.01; v <= 0.0251; v += 0.005) {
+    s += `<line x1="55" x2="625" y1="${ey(v)}" y2="${ey(v)}" stroke="${Math.abs(v) < 1e-9 ? "#1d2327" : "#e3e1da"}"/><text x="48" y="${ey(v) + 4}" font-size="11" text-anchor="end" fill="#5f6b73">${v.toFixed(3)}</text>`;
+  }
+  const r0 = e.event_time.indexOf(0);
+  s += `<line x1="${(ex(r0) + ex(r0 - 1)) / 2}" x2="${(ex(r0) + ex(r0 - 1)) / 2}" y1="15" y2="200" stroke="#1f6f78" stroke-dasharray="4 4"/><text x="${(ex(r0) + ex(r0 - 1)) / 2 + 5}" y="25" font-size="11" fill="#1f6f78">road completed</text>`;
+  e.event_time.forEach((t0, i) => {
+    const m = e.estimate[i], se = e.se[i];
+    s += `<line x1="${ex(i)}" x2="${ex(i)}" y1="${ey(m - 1.96 * se)}" y2="${ey(m + 1.96 * se)}" stroke="#c8414b" stroke-width="2" opacity=".5"/>
+      <circle cx="${ex(i)}" cy="${ey(m)}" r="4" fill="#c8414b"/>
+      <text x="${ex(i)}" y="222" font-size="11" text-anchor="middle" fill="#5f6b73">${t0}</text>`;
+  });
+  ev.innerHTML = s;
+});
+</script>
+</body>
+</html>
