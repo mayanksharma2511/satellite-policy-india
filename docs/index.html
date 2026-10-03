@@ -16,175 +16,273 @@
 
 <div class="app">
   <aside class="side">
-    <p class="lede">India's last village-level data on household wealth is the 2011–12 survey. This tool shows where each village stood then, and how much brighter at night it has become since, measured by satellite every year. Villages that were poor and have barely brightened are flagged for a closer look.</p>
+    <p class="lede">India's last village-level data on household wealth is from 2011–12. This tool combines it with night-time brightness measured by satellite every year since, to find villages that were poor then and have barely changed.</p>
 
     <label class="f" for="state">State</label>
     <select id="state"></select>
     <label class="f" for="district">District</label>
     <select id="district"></select>
 
+    <h2>Who counts as left behind?</h2>
+    <label class="f" for="poor">Among the poorest <b id="poorv">30%</b> of the district in 2012</label>
+    <input type="range" id="poor" min="5" max="60" step="5" value="30">
+    <label class="f" for="slow">and the <b id="slowv">30%</b> that brightened least since</label>
+    <input type="range" id="slow" min="5" max="60" step="5" value="30">
+    <label class="f" for="minpop">Ignore villages smaller than <b id="minpopv">100</b> people</label>
+    <input type="range" id="minpop" min="0" max="1000" step="50" value="100">
+
+    <h2>Plan a programme</h2>
+    <label class="f" for="budget">I can reach <b id="budgetv">25</b> villages</label>
+    <input type="range" id="budget" min="5" max="200" step="5" value="25">
+
     <div class="stats">
-      <div class="stat"><b id="nVill">–</b><small>villages</small></div>
-      <div class="stat"><b id="nBehind">–</b><small>flagged as left behind</small></div>
+      <div class="stat"><b id="sFlag">–</b><small>villages left behind (of <span id="sAll">–</span>)</small></div>
+      <div class="stat"><b id="sPeople">–</b><small>people in them (2011)</small></div>
+      <div class="stat"><b id="sPick">–</b><small>people in your <span id="sN">25</span> priority villages</small></div>
+      <div class="stat"><b id="sPov">–</b><small>average poverty rate (2012) in those villages</small></div>
     </div>
 
-    <div class="legend">
-      <div><span class="dot" style="background:var(--behind)"></span>Left behind: poorest 30% in 2012, slowest 30% to brighten since (villages of 100+ people)</div>
-      <div><span class="dot" style="background:var(--rising)"></span>Poor in 2012 but brightening fast</div>
-      <div><span class="dot" style="background:var(--other)"></span>Other villages</div>
-    </div>
-    <label class="f" for="show">Show on map</label>
-    <select id="show">
-      <option value="all">All villages</option>
-      <option value="poor">Only poor-in-2012 villages</option>
-      <option value="behind">Only left behind</option>
-    </select>
+    <h2>District trend</h2>
+    <div id="trend"></div>
+    <p class="note">Median night brightness by year. <span style="color:var(--behind)">■</span> left-behind villages <span style="color:var(--other)">■</span> all villages in the district.</p>
 
     <div id="detail"></div>
 
-    <h2>Left-behind villages, poorest first</h2>
-    <p class="note">Ranked within this district. <button class="btn ghost" id="dl">Download CSV</button></p>
-    <div class="list" id="list"></div>
-
     <div class="warn">A shortlist for checking on the ground, not a verdict. Night lights capture electrification and large changes in activity; they miss small changes in income. See <a href="trust.html">how far to trust this</a>.</div>
-    <p class="note">Data: SECC 2011–12 and Census via SHRUG (Development Data Lab); VIIRS night lights (NOAA/EOG); PMGSY road records (to 2015). Imagery basemap: Esri.</p>
+    <p class="note">Data: SECC 2011–12 and Census 2011 via SHRUG (Development Data Lab); VIIRS night lights (NOAA/EOG); PMGSY road records (to 2015). Imagery basemap: Esri.</p>
   </aside>
-  <div id="map"></div>
+
+  <section class="main">
+    <div class="tabs">
+      <button class="tab on" data-tab="map">Map</button>
+      <button class="tab" data-tab="table">Priority list</button>
+      <input id="search" type="search" placeholder="Find a village in this district…" autocomplete="off">
+      <div id="results" class="results"></div>
+      <span class="spacer"></span>
+      <label class="note" for="color">Colour</label>
+      <select id="color" class="small">
+        <option value="status">Status</option>
+        <option value="poverty">Poverty rate 2012</option>
+        <option value="growth">Brightening since 2012</option>
+      </select>
+      <button class="btn ghost small" id="dl">Download CSV</button>
+    </div>
+    <div id="mapwrap"><div id="map"></div><div class="maplegend" id="maplegend"></div></div>
+    <div id="tablewrap" hidden>
+      <p class="note" id="tablenote"></p>
+      <table class="t" id="table">
+        <thead><tr>
+          <th data-k="rank" class="n">#</th><th data-k="name">Village</th><th data-k="pop" class="n">People</th>
+          <th data-k="pov" class="n">Poverty 2012</th><th data-k="base" class="n">Brightness 2012–14</th>
+          <th data-k="now" class="n">Latest</th><th data-k="road" class="n">Road</th><th>Trend</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const COLORS = ["#8e9aa3", "#e09f3e", "#c8414b"];
-let districts = [], current = null, layer = null, markers = [], selected = null;
-
-const map = L.map("map", { preferCanvas: true }).setView([22.5, 79], 5);
-const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-  maxZoom: 18, attribution: "Imagery © Esri, Maxar, Earthstar Geographics"
-}).addTo(map);
-const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 18, attribution: "© OpenStreetMap contributors"
-});
-L.control.layers({ "Satellite (today)": imagery, "Streets": streets }).addTo(map);
-
 const $ = id => document.getElementById(id);
 const pct = x => Math.round(x * 100) + "%";
+const fmt = n => n >= 1e5 ? (n / 1e5).toFixed(1) + " lakh" : n.toLocaleString("en-IN");
+const C = { behind: "#c8414b", pick: "#7a1f3d", rising: "#e09f3e", other: "#8e9aa3" };
 
+let districts = [], D = null, layer = null, sortKey = "rank", sortDir = 1, chosen = null;
+
+const map = L.map("map", { preferCanvas: true }).setView([22.5, 79], 5);
+const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 18, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }).addTo(map);
+const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  { maxZoom: 18, attribution: "© OpenStreetMap contributors" });
+L.control.layers({ "Satellite (today)": imagery, "Streets": streets }).addTo(map);
+
+// ---------- loading
 fetch("data/districts.json").then(r => r.json()).then(list => {
   districts = list;
   const states = [...new Set(list.map(d => d.state))].sort();
   $("state").innerHTML = states.map(s => `<option>${s}</option>`).join("");
-  const fromHash = list.find(d => d.id === location.hash.slice(1));
-  const start = fromHash || list.find(d => d.id === "odisha_mayurbhanj") || list[0];
+  const start = list.find(d => d.id === location.hash.slice(1)) || list.find(d => d.id === "odisha_mayurbhanj") || list[0];
   $("state").value = start.state;
   fillDistricts(start.id);
-});
+}).catch(() => { $("detail").innerHTML = `<div class="warn">Could not load the village data.</div>`; });
 
 function fillDistricts(pick) {
   const ds = districts.filter(d => d.state === $("state").value).sort((a, b) => a.district.localeCompare(b.district));
-  $("district").innerHTML = ds.map(d => `<option value="${d.id}">${d.district} (${d.left_behind} flagged)</option>`).join("");
-  $("district").value = pick && ds.some(d => d.id === pick) ? pick : ds[0].id;
+  $("district").innerHTML = ds.map(d => `<option value="${d.id}">${d.district} · ${d.villages.toLocaleString()} villages</option>`).join("");
+  $("district").value = ds.some(d => d.id === pick) ? pick : ds[0].id;
   loadDistrict($("district").value);
 }
 $("state").onchange = () => fillDistricts();
 $("district").onchange = () => loadDistrict($("district").value);
-$("show").onchange = () => draw();
 
 function loadDistrict(id) {
   history.replaceState(null, "", "#" + id);
   fetch(`data/d/${id}.json`).then(r => r.json()).then(data => {
-    const f = Object.fromEntries(data.fields.map((n, i) => [n, i]));
-    current = {
-      id, years: data.years,
-      villages: data.villages.map(v => Object.fromEntries(Object.entries(f).map(([k, i]) => [k, v[i]])))
-    };
-    $("nVill").textContent = current.villages.length.toLocaleString();
-    $("nBehind").textContent = current.villages.filter(v => v.flag === 2).length.toLocaleString();
-    $("detail").innerHTML = "";
-    draw(true);
-    renderList();
+    const f = data.fields;
+    D = { id, years: data.years, name: $("district").selectedOptions[0].text.split(" · ")[0],
+          villages: data.villages.map((row, i) => { const v = { i }; f.forEach((k, j) => v[k] = row[j]); return v; }) };
+    chosen = null; $("detail").innerHTML = ""; $("search").value = ""; $("results").innerHTML = "";
+    update(true);
   });
 }
 
-function draw(fit) {
-  if (layer) map.removeLayer(layer);
-  const mode = $("show").value;
-  const vs = current.villages.filter(v =>
-    mode === "all" || (mode === "poor" && v.poor_rank >= 0.7) || (mode === "behind" && v.flag === 2));
-  markers = [];
-  layer = L.layerGroup(vs.sort((a, b) => a.flag - b.flag).map(v => {
-    const m = L.circleMarker([v.lat, v.lon], {
-      radius: v.flag ? 5 : 3, weight: v.flag ? 1 : 0, color: "#fff",
-      fillColor: COLORS[v.flag], fillOpacity: v.flag ? 0.95 : 0.6
-    }).on("click", () => showVillage(v));
-    m.village = v; markers.push(m);
-    return m;
-  })).addTo(map);
-  if (fit && vs.length) map.fitBounds(L.latLngBounds(vs.map(v => [v.lat, v.lon])), { padding: [20, 20] });
-}
-
-function renderList() {
-  const behind = current.villages.filter(v => v.flag === 2)
-    .sort((a, b) => b.pov - a.pov || a.growth_rank - b.growth_rank);
-  $("list").innerHTML = behind.slice(0, 200).map((v, i) =>
-    `<div class="row" data-i="${i}">${v.name || "(unnamed)"}<span>${pct(v.pov)} poor · ${v.base} → ${v.now}</span></div>`
-  ).join("") + (behind.length > 200 ? `<p class="note">Showing 200 of ${behind.length}; download the CSV for all.</p>` : "");
-  [...$("list").children].forEach(el => {
-    if (el.dataset.i !== undefined) el.onclick = () => {
-      const v = behind[+el.dataset.i];
-      map.setView([v.lat, v.lon], 14);
-      showVillage(v);
-    };
-  });
-}
-
-function sparkline(v, years) {
-  const w = 330, h = 90, p = 22, vals = v.lights, max = Math.max(...vals, 0.5);
-  const x = i => p + i * (w - 2 * p) / (vals.length - 1), y = val => h - 18 - (val / max) * (h - 30);
-  const path = vals.map((val, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(val).toFixed(1)}`).join("");
-  let road = "";
-  if (v.road && v.road >= years[0]) {
-    const rx = x(v.road - years[0]);
-    road = `<line x1="${rx}" x2="${rx}" y1="8" y2="${h - 18}" stroke="#1f6f78" stroke-dasharray="3 3"/><text x="${rx + 3}" y="14" font-size="10" fill="#1f6f78">road</text>`;
+// ---------- classification (recomputed live from the sliders)
+function classify() {
+  const poor = 1 - $("poor").value / 100, slow = $("slow").value / 100, minpop = +$("minpop").value;
+  for (const v of D.villages) {
+    const big = (v.pop || 0) >= minpop;
+    v.status = big && v.poor_rank >= poor && v.growth_rank <= slow ? "behind"
+      : big && v.poor_rank >= poor && v.growth_rank >= 1 - slow ? "rising" : "other";
+    v.rank = null;
   }
-  return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Night brightness by year">
-    <path d="${path}" fill="none" stroke="#c8414b" stroke-width="2"/>${road}
-    <text x="${p}" y="${h - 4}" font-size="10" fill="#5f6b73">${years[0]}</text>
-    <text x="${w - p}" y="${h - 4}" font-size="10" fill="#5f6b73" text-anchor="end">${years[years.length - 1]}</text>
-    <text x="2" y="${y(max) + 4}" font-size="10" fill="#5f6b73">${max.toFixed(1)}</text></svg>`;
+  const behind = D.villages.filter(v => v.status === "behind")
+    .sort((a, b) => b.pov - a.pov || a.growth_rank - b.growth_rank);
+  behind.forEach((v, k) => v.rank = k + 1);
+  return behind;
 }
 
-function showVillage(v) {
-  const label = ["", "Poor in 2012, brightening fast", "Left behind"][v.flag];
-  const road = v.road ? `PMGSY road completed ${v.road}` : "No PMGSY road recorded by 2015";
-  $("detail").innerHTML = `<div class="card">
-    <h3>${v.name || "(unnamed village)"}</h3>
-    ${label ? `<p class="note" style="color:${COLORS[v.flag]};font-weight:600;margin:0 0 6px">${label}</p>` : ""}
-    <table>
-      <tr><td>Population (2011)</td><td>${v.pop ? v.pop.toLocaleString() : "–"}</td></tr>
-      <tr><td>Poverty rate (2012 survey)</td><td>${pct(v.pov)}</td></tr>
-      <tr><td>Poorer than … of district villages</td><td>${pct(v.poor_rank)}</td></tr>
-      <tr><td>Night brightness 2012–14 → latest</td><td>${v.base} → ${v.now}</td></tr>
-      <tr><td>Brightened more than … of district villages</td><td>${pct(v.growth_rank)}</td></tr>
-    </table>
-    ${sparkline(v, current.years)}
-    <p class="note" style="margin:4px 0 0">Night brightness by year (nW/cm²/sr). ${road}.</p>
-  </div>`;
+function update(fit) {
+  if (!D) return;
+  ["poor", "slow", "minpop", "budget"].forEach(k => $(k + "v").textContent = k === "minpop" || k === "budget" ? $(k).value : $(k).value + "%");
+  const behind = classify(), n = +$("budget").value, picks = behind.slice(0, n);
+  picks.forEach(v => v.status = "pick");
+  const people = a => a.reduce((s, v) => s + (v.pop || 0), 0);
+  $("sAll").textContent = D.villages.length.toLocaleString("en-IN");
+  $("sFlag").textContent = behind.length.toLocaleString("en-IN");
+  $("sPeople").textContent = fmt(people(behind));
+  $("sN").textContent = Math.min(n, behind.length);
+  $("sPick").textContent = fmt(people(picks));
+  $("sPov").textContent = picks.length ? pct(picks.reduce((s, v) => s + v.pov, 0) / picks.length) : "–";
+  drawMap(fit); drawTable(behind); drawTrend(behind);
 }
+["poor", "slow", "minpop", "budget"].forEach(k => $(k).oninput = () => update(false));
+$("color").onchange = () => drawMap(false);
+
+// ---------- map
+function colourOf(v) {
+  const mode = $("color").value;
+  if (mode === "poverty") return ramp(v.pov);
+  if (mode === "growth") return ramp(1 - v.growth_rank);
+  return { pick: C.pick, behind: C.behind, rising: C.rising, other: C.other }[v.status];
+}
+function ramp(t) { // light yellow -> deep red
+  const a = [255, 237, 160], b = [189, 0, 38], c = a.map((x, i) => Math.round(x + (b[i] - x) * Math.max(0, Math.min(1, t))));
+  return `rgb(${c})`;
+}
+function drawMap(fit) {
+  if (layer) map.removeLayer(layer);
+  const order = { other: 0, rising: 1, behind: 2, pick: 3 };
+  const vs = D.villages.slice().sort((a, b) => order[a.status] - order[b.status]);
+  const status = $("color").value === "status";
+  layer = L.layerGroup(vs.map(v => L.circleMarker([v.lat, v.lon], {
+    radius: !status ? 4 : v.status === "pick" ? 7 : v.status === "other" ? 3 : 5,
+    weight: v.status === "pick" ? 2 : status && v.status === "other" ? 0 : 0.5, color: "#fff",
+    fillColor: colourOf(v), fillOpacity: status && v.status === "other" ? 0.55 : 0.95
+  }).bindTooltip(`${v.name || "(unnamed)"} · ${pct(v.pov)} poor`).on("click", () => showVillage(v)))).addTo(map);
+  if (fit) map.fitBounds(L.latLngBounds(D.villages.map(v => [v.lat, v.lon])), { padding: [20, 20] });
+  $("maplegend").innerHTML = status
+    ? `<span><i style="background:${C.pick}"></i>Your ${$("sN").textContent} priority villages</span><span><i style="background:${C.behind}"></i>Left behind</span><span><i style="background:${C.rising}"></i>Poor but brightening fast</span><span><i style="background:${C.other}"></i>Other</span>`
+    : `<span>${$("color").value === "poverty" ? "Poverty rate 2012" : "Brightening since 2012"}:</span><span><i style="background:${ramp(0)}"></i>${$("color").value === "poverty" ? "low" : "most"}</span><span><i style="background:${ramp(1)}"></i>${$("color").value === "poverty" ? "high" : "least"}</span>`;
+}
+
+// ---------- table
+function spark(vals, w = 90, h = 22, road = null, years = D.years) {
+  const max = Math.max(...vals, 0.3), x = i => 2 + i * (w - 4) / (vals.length - 1), y = v => h - 2 - (v / max) * (h - 4);
+  const r = road && road >= years[0] ? `<line x1="${x(road - years[0])}" x2="${x(road - years[0])}" y1="0" y2="${h}" stroke="#1f6f78" stroke-dasharray="2 2"/>` : "";
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${r}<path d="${vals.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1)).join("")}" fill="none" stroke="#c8414b" stroke-width="1.5"/></svg>`;
+}
+function drawTable(behind) {
+  const rows = behind.slice().sort((a, b) => {
+    const x = a[sortKey] ?? -1, y = b[sortKey] ?? -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * sortDir;
+  });
+  const n = +$("budget").value;
+  $("tablenote").textContent = `${behind.length.toLocaleString("en-IN")} left-behind villages in ${D.name}. The first ${Math.min(n, behind.length)} by poverty rate (highlighted) are your priority villages. Click a column to sort, a row to see it on the map.`;
+  $("table").querySelector("tbody").innerHTML = rows.map(v => `<tr data-i="${v.i}" class="${v.rank <= n ? "pick" : ""}">
+    <td class="n">${v.rank}</td><td>${v.name || "(unnamed)"}</td><td class="n">${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td>
+    <td class="n">${pct(v.pov)}</td><td class="n">${v.base}</td><td class="n">${v.now}</td><td class="n">${v.road || "–"}</td>
+    <td>${spark(v.lights, 90, 22, v.road)}</td></tr>`).join("");
+}
+$("table").querySelector("tbody").onclick = e => {
+  const tr = e.target.closest("tr"); if (!tr) return;
+  const v = D.villages[+tr.dataset.i]; showTab("map"); focus(v);
+};
+$("table").querySelectorAll("th[data-k]").forEach(th => th.onclick = () => {
+  const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : (k === "pov" || k === "pop" ? -1 : 1); sortKey = k;
+  drawTable(classify().map((v, i) => (i < +$("budget").value && (v.status = "pick"), v)));
+});
+
+// ---------- district trend
+function drawTrend(behind) {
+  const med = a => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+  const all = D.years.map((_, k) => med(D.villages.map(v => v.lights[k])));
+  const lb = D.years.map((_, k) => med(behind.map(v => v.lights[k])));
+  const w = 340, h = 120, p = 26, max = Math.max(...all, ...lb, 0.3);
+  const x = i => p + i * (w - p - 8) / (D.years.length - 1), y = v => h - 20 - (v / max) * (h - 34);
+  const line = (a, c) => `<path d="${a.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1)).join("")}" fill="none" stroke="${c}" stroke-width="2.2"/>`;
+  $("trend").innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="District brightness trend">
+    <line x1="${p}" x2="${w - 8}" y1="${y(0)}" y2="${y(0)}" stroke="#e3e1da"/>
+    ${line(all, C.other)}${behind.length ? line(lb, C.behind) : ""}
+    <text x="${p}" y="${h - 4}" font-size="10" fill="#5f6b73">${D.years[0]}</text>
+    <text x="${w - 8}" y="${h - 4}" font-size="10" fill="#5f6b73" text-anchor="end">${D.years[D.years.length - 1]}</text>
+    <text x="${p - 4}" y="${y(max) + 4}" font-size="10" fill="#5f6b73" text-anchor="end">${max.toFixed(1)}</text>
+    <text x="${p - 4}" y="${y(0) + 4}" font-size="10" fill="#5f6b73" text-anchor="end">0</text></svg>`;
+}
+
+// ---------- village detail
+function focus(v) { map.setView([v.lat, v.lon], 14); showVillage(v); }
+function showVillage(v) {
+  const label = { pick: "Priority village (left behind)", behind: "Left behind", rising: "Poor in 2012, brightening fast", other: "" }[v.status];
+  const road = v.road ? `PMGSY road completed ${v.road}` : "No PMGSY road recorded by 2015";
+  const html = `<div class="card">
+    <h3>${v.name || "(unnamed village)"}</h3>
+    ${label ? `<p class="tag" style="color:${C[v.status === "pick" ? "pick" : v.status]}">${label}${v.rank ? ` · #${v.rank} in district` : ""}</p>` : ""}
+    <table>
+      <tr><td>People (2011)</td><td>${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td></tr>
+      <tr><td>Poverty rate (2012)</td><td>${pct(v.pov)}</td></tr>
+      <tr><td>Poorer than</td><td>${pct(v.poor_rank)} of district villages</td></tr>
+      <tr><td>Brightness 2012–14 → latest</td><td>${v.base} → ${v.now}</td></tr>
+      <tr><td>Brightened more than</td><td>${pct(v.growth_rank)} of district villages</td></tr>
+    </table>
+    ${spark(v.lights, 300, 70, v.road)}
+    <p class="note" style="margin:4px 0 0">Night brightness ${D.years[0]}–${D.years[D.years.length - 1]}${v.road && v.road >= D.years[0] ? "; dashed line = road" : ""}. ${road}.</p>
+  </div>`;
+  $("detail").innerHTML = html;
+  L.popup({ maxWidth: 330 }).setLatLng([v.lat, v.lon]).setContent(html).openOn(map);
+}
+
+// ---------- search
+$("search").oninput = () => {
+  const q = $("search").value.trim().toLowerCase();
+  if (!q || !D) { $("results").innerHTML = ""; return; }
+  const hits = D.villages.filter(v => (v.name || "").toLowerCase().includes(q)).slice(0, 8);
+  $("results").innerHTML = hits.length ? hits.map(v => `<div data-i="${v.i}">${v.name} <span>${pct(v.pov)} poor</span></div>`).join("") : `<div class="none">No village by that name</div>`;
+};
+$("results").onclick = e => {
+  const el = e.target.closest("[data-i]"); if (!el) return;
+  $("results").innerHTML = ""; $("search").value = ""; showTab("map"); focus(D.villages[+el.dataset.i]);
+};
+
+// ---------- tabs and download
+function showTab(t) {
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  $("mapwrap").hidden = t !== "map"; $("tablewrap").hidden = t !== "table";
+  if (t === "map") setTimeout(() => map.invalidateSize(), 0);
+}
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 $("dl").onclick = () => {
-  if (!current) return;
-  const head = ["village", "latitude", "longitude", "population_2011", "poverty_rate_2012",
-    "consumption_pc_2012", "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightening_rank_in_district",
-    "pmgsy_road_year", "status"];
-  const status = ["other", "poor_brightening_fast", "left_behind"];
-  const rows = current.villages.slice().sort((a, b) => b.flag - a.flag || b.pov - a.pov).map(v =>
-    [`"${(v.name || "").replace(/"/g, "'")}"`, v.lat, v.lon, v.pop ?? "", v.pov, v.cons ?? "", v.poor_rank,
-     v.base, v.now, v.growth_rank, v.road ?? "", status[v.flag]].join(","));
-  const blob = new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" });
+  if (!D) return;
+  const head = ["priority_rank", "village", "latitude", "longitude", "population_2011", "poverty_rate_2012", "consumption_pc_2012",
+    "poverty_rank_in_district", "lights_2012_14", "lights_latest", "brightening_rank_in_district", "pmgsy_road_year", "status"];
+  const rows = D.villages.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || b.pov - a.pov).map(v =>
+    [v.rank ?? "", `"${(v.name || "").replace(/"/g, "'")}"`, v.lat, v.lon, v.pop ?? "", v.pov, v.cons ?? "", v.poor_rank,
+     v.base, v.now, v.growth_rank, v.road ?? "", v.status === "pick" ? "priority" : v.status].join(","));
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${current.id}_villages.csv`;
-  a.click();
+  a.href = URL.createObjectURL(new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" }));
+  a.download = `${D.id}_villages.csv`; a.click();
 };
 </script>
 </body>
