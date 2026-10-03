@@ -75,3 +75,12 @@ Model tuning stops here. Next: write-up and map.
   Left behind = poorest 30% of district in 2012 (SECC poverty rate) and darkest 30% today (latest 3 years); first version used slowest 30% to brighten, changed because flagged villages ended as bright as the district
   villages of 100+ people: 24,978 flagged.
 - Website in docs/ (GitHub Pages): index.html (tracker, CSV download), trust.html (findings, slider).
+
+## Final checks (3 Oct 2026)
+- All scripts re-run without errors: evaluate_predictions, rd_roads, lights_after_road, build_tracker.
+- Site data: 207,576 villages, 190 districts, no missing coordinates, poverty rates or light values; 68 villages have no recorded name.
+- Browser test: all 190 districts load with no errors under all three list options; search, table sorting,
+  colour modes, popups, CSV download, the trust-page slider (0/15/40%) and phone width all work.
+- Added tehsil names (SHRUG shrid_loc_names) to the table, popup, search and CSV, since field teams plan by tehsil
+  and village names repeat.
+- README written.

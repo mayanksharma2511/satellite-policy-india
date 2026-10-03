@@ -61,7 +61,7 @@
     <div class="tabs">
       <button class="tab on" data-tab="map">Map</button>
       <button class="tab" data-tab="table">Priority list <span id="tabN"></span></button>
-      <input id="search" type="search" placeholder="Find a village in this district…" autocomplete="off">
+      <input id="search" type="search" placeholder="Find a village or tehsil…" autocomplete="off">
       <div id="results" class="results"></div>
       <span class="spacer"></span>
       <label class="note" for="color">Colour</label>
@@ -77,7 +77,7 @@
       <p class="note" id="tablenote"></p>
       <table class="t" id="table">
         <thead><tr>
-          <th data-k="rank" class="n">#</th><th data-k="name">Village</th><th data-k="pop" class="n">People</th>
+          <th data-k="rank" class="n">#</th><th data-k="name">Village</th><th data-k="tehsil">Tehsil</th><th data-k="pop" class="n">People</th>
           <th data-k="pov" class="n">Poor in 2012</th><th data-k="ratio" class="n">Brightness now vs 2012–14</th>
           <th data-k="now_rank" class="n">Brighter today than</th><th data-k="road" class="n">Road built</th><th>Brightness 2012–25</th>
         </tr></thead>
@@ -240,7 +240,7 @@ function drawTable(behind) {
   const n = +$("budget").value;
   $("tablenote").textContent = `${behind.length.toLocaleString("en-IN")} left-behind villages in ${D.name}. The first ${Math.min(n, behind.length)} by poverty rate (highlighted) are your priority villages. Click a column to sort, a row to see it on the map.`;
   $("table").querySelector("tbody").innerHTML = rows.map(v => `<tr data-i="${v.i}" class="${v.rank <= n ? "pick" : ""}">
-    <td class="n">${v.rank}</td><td>${v.name || "(unnamed)"}</td><td class="n">${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td>
+    <td class="n">${v.rank}</td><td>${v.name || "(unnamed)"}</td><td>${v.tehsil || "–"}</td><td class="n">${v.pop ? v.pop.toLocaleString("en-IN") : "–"}</td>
     <td class="n">${pct(v.pov)}</td><td class="n">${ratio(v)}</td><td class="n">${pct(v.now_rank)} of district</td><td class="n">${v.road || "–"}</td>
     <td>${spark(v.lights, 90, 22, v.road)}</td></tr>`).join("");
 }
@@ -276,6 +276,7 @@ function showVillage(v) {
   const label = { pick: "Priority village (left behind)", behind: "Left behind", rising: "Poor in 2012, now among the brightest", other: "" }[v.status];
   const html = `<div class="card">
     <h3>${v.name || "(unnamed village)"}</h3>
+    <p class="note" style="margin:-4px 0 6px">${v.tehsil ? v.tehsil + " tehsil, " : ""}${D.name}</p>
     ${label ? `<p class="tag" style="color:${C[v.status === "pick" ? "pick" : v.status]}">${label}${v.rank ? ` · #${v.rank} in district` : ""}</p>` : ""}
     ${v.status === "pick" || v.status === "behind" ? `<p class="why">Why it's on the list: in 2012 it was poorer than ${pct(v.poor_rank)} of villages in the district, and today it is darker at night than ${pct(1 - v.now_rank)} of them. Its brightness has changed ${ratio(v)} since 2012–14, against a typical ${D.medRatio.toFixed(1)}× in the district.</p>` : ""}
     <table>
@@ -296,8 +297,8 @@ function showVillage(v) {
 $("search").oninput = () => {
   const q = $("search").value.trim().toLowerCase();
   if (!q || !D) { $("results").innerHTML = ""; return; }
-  const hits = D.villages.filter(v => (v.name || "").toLowerCase().includes(q)).slice(0, 8);
-  $("results").innerHTML = hits.length ? hits.map(v => `<div data-i="${v.i}">${v.name} <span>${pct(v.pov)} poor</span></div>`).join("") : `<div class="none">No village by that name</div>`;
+  const hits = D.villages.filter(v => ((v.name || "") + " " + (v.tehsil || "")).toLowerCase().includes(q)).slice(0, 8);
+  $("results").innerHTML = hits.length ? hits.map(v => `<div data-i="${v.i}">${v.name} <span>${v.tehsil || ""}</span></div>`).join("") : `<div class="none">No village by that name</div>`;
 };
 $("results").onclick = e => {
   const el = e.target.closest("[data-i]"); if (!el) return;
@@ -318,11 +319,11 @@ $("dl").onclick = () => {
   const state = $("state").value, district = D.name;
   const label = { pick: "Priority (left behind)", behind: "Left behind", rising: "Poor in 2012, now among the brightest", other: "" };
   const q = x => `"${String(x ?? "").replace(/"/g, "'")}"`;
-  const head = ["Priority rank", "Village", "District", "State", "Status", "People (2011)", "Share poor (2012)",
+  const head = ["Priority rank", "Village", "Tehsil", "District", "State", "Status", "People (2011)", "Share poor (2012)",
     "Poorer than (% of district villages, 2012)", "Darker at night than (% of district villages, today)",
     "Night brightness now vs 2012-14", "PMGSY road built", "Latitude", "Longitude", "Google Maps"];
   const rows = D.villages.slice().sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || b.pov - a.pov).map(v => [
-    v.rank ?? "", q(v.name), q(district), q(state), q(label[v.status]), v.pop ?? "", pct(v.pov),
+    v.rank ?? "", q(v.name), q(v.tehsil), q(district), q(state), q(label[v.status]), v.pop ?? "", pct(v.pov),
     pct(v.poor_rank), pct(1 - v.now_rank), ratio(v), v.road ?? "", v.lat, v.lon,
     q(`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lon}`)].join(","));
   const a = document.createElement("a");

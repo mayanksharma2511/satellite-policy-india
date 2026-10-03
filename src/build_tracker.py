@@ -32,6 +32,9 @@ def main():
     lights = pd.read_csv(LIGHTS, dtype={"shrid2": str})
     years = [int(c[-4:]) for c in lights.columns if c.startswith("lights_")]
     d = v.merge(lights, on="shrid2", how="inner")
+    tehsil = pd.read_csv("data/raw/shrug/shrug-shrid-keys-csv/shrid_loc_names.csv", dtype={"shrid2": str},
+                         usecols=["shrid2", "subdistrict_name"]).drop_duplicates("shrid2")
+    d = d.merge(tehsil, on="shrid2", how="left")
     d = d.dropna(subset=["secc_pov_rate_rural", "latitude", "longitude"]).copy()
 
     base = d[[f"lights_{y}" for y in years[:3]]].mean(axis=1)
@@ -49,7 +52,7 @@ def main():
 
     (OUT / "d").mkdir(parents=True, exist_ok=True)
     index = []
-    fields = ["name", "lat", "lon", "pop", "pov", "cons", "road", "base", "now", "poor_rank",
+    fields = ["name", "tehsil", "lat", "lon", "pop", "pov", "cons", "road", "base", "now", "poor_rank",
               "growth_rank", "flag", "lights"]
     for (state, dist), g in d.groupby(["state_name", "district_name"]):
         did = f"{state}_{dist}".lower().replace(" ", "-").replace("/", "-")
@@ -58,6 +61,7 @@ def main():
             flag = 2 if r.left_behind else (1 if r.poor_rising else 0)
             rows.append([
                 str(r.village_name).title() if pd.notna(r.village_name) else "",
+                str(r.subdistrict_name).title() if pd.notna(r.subdistrict_name) else "",
                 round(r.latitude, 5), round(r.longitude, 5),
                 int(r.pc11_pca_tot_p) if pd.notna(r.pc11_pca_tot_p) else None,
                 round(r.secc_pov_rate_rural, 3),

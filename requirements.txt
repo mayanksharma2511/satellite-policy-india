@@ -5,3 +5,4 @@ earthengine-api
 pillow
 statsmodels
 linearmodels
+scikit-learn
